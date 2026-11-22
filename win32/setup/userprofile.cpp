@@ -312,34 +312,61 @@ DWORD removeUser(const std::filesystem::path &root, bool rollback) {
                         : "removeUser uninstall begin");
     InputApi api;
     const auto before = api.profiles();
+    logStep("removeUser EnumEnabledLayoutOrTip count", before.size());
     UserBackup backup;
     const auto saved = std::filesystem::exists(backupPath());
+    logStep("removeUser profile backup exists", saved);
     if (saved) {
+        logMessage("removeUser profile backup read begin");
         backup = readBackup();
+        logMessage("removeUser profile backup read complete");
     }
     const auto *current = defaultProfile(before);
+    logStep("removeUser current default is Fcitx5", current && isFcitx(*current));
     if (current && isFcitx(*current)) {
         const auto *replacement = restoreProfile(before, backup.previous);
-        if (!replacement ||
-            !api.setDefault(profileId(*replacement).c_str(), 0)) {
+        if (!replacement) {
+            logStep("removeUser replacement profile", ERROR_NOT_FOUND);
+            return ERROR_INSTALL_FAILURE;
+        }
+        const auto setDefault =
+            api.setDefault(profileId(*replacement).c_str(), 0);
+        logStep("removeUser SetDefaultLayoutOrTip BOOL", setDefault);
+        if (!setDefault) {
             return ERROR_INSTALL_FAILURE;
         }
         const auto result = activate(*replacement);
+        logStep("removeUser activate replacement", result);
         if (result) {
             return result;
         }
     }
-    if ((!rollback || !backup.enabled) &&
-        !api.install(profileId(fcitxProfile()).c_str(), 1)) {
-        return ERROR_INSTALL_FAILURE;
+    if (!rollback || !backup.enabled) {
+        const auto disabled =
+            api.install(profileId(fcitxProfile()).c_str(), 1);
+        logStep("removeUser disable Fcitx5 profile BOOL", disabled);
+        if (!disabled) {
+            return ERROR_INSTALL_FAILURE;
+        }
     }
+    logMessage("removeUser ServiceController construction begin");
     ipc::ServiceController controller(
         root / L"bin" / L"Fcitx5.exe", ipc::serviceIdentity(),
         [](std::string_view message) { logMessage(message); });
+    logMessage("removeUser ServiceController stop begin");
     controller.stop();
+    logMessage("removeUser ServiceController stop complete");
     if (rollback && saved) {
-        std::filesystem::remove(backupPath());
+        std::error_code error;
+        const auto removed = std::filesystem::remove(backupPath(), error);
+        logStep("removeUser remove profile backup",
+                error ? static_cast<DWORD>(error.value())
+                      : (removed ? ERROR_SUCCESS : ERROR_FILE_NOT_FOUND));
+        if (error) {
+            return static_cast<DWORD>(error.value());
+        }
     }
+    logMessage("removeUser complete");
     return ERROR_SUCCESS;
 }
 
