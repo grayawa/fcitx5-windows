@@ -11,7 +11,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 if ($Architecture -eq 'arm64' -and
-    [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString() -ne 'Arm64') {
+    [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString() -ne 'Arm64') {
     throw 'ARM64 installer smoke test must run from a native ARM64 PowerShell process.'
 }
 $installer = (Resolve-Path -LiteralPath $InstallerPath).Path
