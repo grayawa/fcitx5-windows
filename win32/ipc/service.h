@@ -5,6 +5,8 @@
 #include "isolationpolicy.h"
 #include "transport.h"
 #include <exception>
+#include <functional>
+#include <string_view>
 #include <filesystem>
 #include <ntsecapi.h>
 #include <stdexcept>
@@ -265,16 +267,29 @@ inline void launchServiceExecutable(const std::filesystem::path &path,
 
 class ServiceController {
   public:
+    using Logger = std::function<void(std::string_view)>;
+
     explicit ServiceController(std::filesystem::path core,
-                               std::wstring identity = serviceIdentity())
+                               std::wstring identity = serviceIdentity(),
+                               Logger logger = {})
         : core_(std::move(core)), identity_(std::move(identity)),
-          control_(createControlMutex()) {
+          logger_(std::move(logger)), control_(createControlMutex()) {
+        log("control mutex wait begin timeout_ms=5000");
+        const auto started = GetTickCount64();
         const auto result = WaitForSingleObject(control_.get(), 5000);
+        const auto elapsed = GetTickCount64() - started;
+        log("control mutex wait result=" + std::to_string(result) +
+            " elapsed_ms=" + std::to_string(elapsed));
         if (result != WAIT_OBJECT_0 && result != WAIT_ABANDONED) {
-            serviceError(result == WAIT_TIMEOUT ? ERROR_TIMEOUT
-                                                : GetLastError());
+            const auto error = result == WAIT_TIMEOUT ? ERROR_TIMEOUT
+                                                      : GetLastError();
+            log("control mutex acquisition failed error=" +
+                std::to_string(error));
+            serviceError(error);
         }
         locked_ = true;
+        log(result == WAIT_ABANDONED ? "control mutex acquired abandoned"
+                                     : "control mutex acquired");
     }
     ~ServiceController() {
         if (locked_) {
@@ -282,61 +297,111 @@ class ServiceController {
         }
     }
     bool ensureCore(bool explicitStart = false) {
+        log("ensureCore begin explicit=" + std::to_string(explicitStart));
         if (!InstallationGate(core_.parent_path().parent_path())
                  .allowsStart()) {
+            log("ensureCore blocked by installation gate");
             return false;
         }
         auto state = readServiceState(identity_);
         if (state.disabled) {
+            log("ensureCore blocked disabled=1");
             return false;
         }
         if (running(L"Core")) {
+            log("ensureCore Core already running");
             return true;
         }
         const auto now = GetTickCount64();
         if (!explicitStart && state.lastLaunch && now >= state.lastLaunch &&
             now - state.lastLaunch < 10000) {
+            log("ensureCore launch throttled");
             return false;
         }
         state.lastLaunch = now;
         save(state);
+        log("ensureCore CreateProcess begin path=" +
+            core_.u8string().empty()
+                ? std::string()
+                : std::string(core_.u8string().begin(), core_.u8string().end()));
         launchServiceExecutable(core_, true);
+        log("ensureCore CreateProcess returned; waiting for Core owner");
         for (unsigned attempt = 0; attempt < 100; ++attempt) {
             if (running(L"Core")) {
+                log("ensureCore Core owner acquired after_ms=" +
+                    std::to_string((attempt + 1) * 20));
                 return true;
             }
             Sleep(20);
         }
+        log("ensureCore Core owner wait timed out");
         serviceError(ERROR_SERVICE_REQUEST_TIMEOUT);
         return false;
     }
     void stop() {
+        log("stop begin");
         auto state = readServiceState(identity_);
         state.disabled = 1;
         save(state);
+        log("stop persisted disabled=1");
         std::exception_ptr failure;
         for (const auto role : {L"Settings", L"Core"}) {
             try {
                 stopProcess(role);
+            } catch (const std::system_error &error) {
+                log("stop role failed role=" + roleName(role) +
+                    " error=" + std::to_string(error.code().value()));
+                if (!failure) {
+                    failure = std::current_exception();
+                }
             } catch (...) {
+                log("stop role failed role=" + roleName(role) +
+                    " error=unknown");
                 if (!failure) {
                     failure = std::current_exception();
                 }
             }
         }
         if (failure) {
+            log("stop failed");
             std::rethrow_exception(failure);
         }
+        log("stop complete");
     }
     bool restart() {
-        const auto settingsOpen = running(L"Settings");
-        stop();
-        auto state = readServiceState(identity_);
-        state.disabled = 0;
-        state.lastLaunch = 0;
-        save(state);
-        ensureCore(true);
-        return settingsOpen;
+        const auto previous = readServiceState(identity_);
+        log("restart begin previous_disabled=" +
+            std::to_string(previous.disabled) + " previous_lastLaunch=" +
+            std::to_string(previous.lastLaunch));
+        try {
+            const auto settingsOpen = running(L"Settings");
+            log(std::string("restart Settings running=") +
+                (settingsOpen ? "1" : "0"));
+            stop();
+            auto state = readServiceState(identity_);
+            state.disabled = 0;
+            state.lastLaunch = 0;
+            save(state);
+            log("restart persisted disabled=0; ensuring Core");
+            ensureCore(true);
+            log("restart complete");
+            return settingsOpen;
+        } catch (...) {
+            const auto failure = std::current_exception();
+            try {
+                auto state = readServiceState(identity_);
+                state.disabled = previous.disabled;
+                state.lastLaunch = previous.lastLaunch;
+                save(state);
+                log("restart failure restored previous service state");
+            } catch (const std::system_error &error) {
+                log("restart failed to restore service state error=" +
+                    std::to_string(error.code().value()));
+            } catch (...) {
+                log("restart failed to restore service state error=unknown");
+            }
+            std::rethrow_exception(failure);
+        }
     }
     bool running(const wchar_t *role) const {
         ServiceHandle owner(OpenMutexW(SYNCHRONIZE | MUTEX_MODIFY_STATE, FALSE,
@@ -382,15 +447,22 @@ class ServiceController {
         }
     }
     void stopProcess(const wchar_t *role) const {
+        const auto name = roleName(role);
+        log("stopProcess begin role=" + name);
         if (!running(role)) {
+            log("stopProcess role not running role=" + name);
             return;
         }
         ServiceHandle owner(OpenMutexW(SYNCHRONIZE | MUTEX_MODIFY_STATE, FALSE,
                                        objectName(role, L"-owner").c_str()));
         if (!owner.get()) {
-            serviceError();
+            const auto error = GetLastError();
+            log("stopProcess open owner failed role=" + name +
+                " error=" + std::to_string(error));
+            serviceError(error);
         }
         const auto end = GetTickCount64() + 3000;
+        unsigned signals = 0;
         do {
             // Acquisition publishes ownership just before creating/resetting
             // the event. Re-signal while waiting so startup cannot lose a stop.
@@ -398,24 +470,52 @@ class ServiceController {
                                            objectName(role, L"-stop").c_str()));
             if (event.get()) {
                 if (!SetEvent(event.get())) {
-                    serviceError();
+                    const auto error = GetLastError();
+                    log("stopProcess SetEvent failed role=" + name +
+                        " error=" + std::to_string(error));
+                    serviceError(error);
                 }
+                ++signals;
             } else if (GetLastError() != ERROR_FILE_NOT_FOUND) {
-                serviceError();
+                const auto error = GetLastError();
+                log("stopProcess open stop event failed role=" + name +
+                    " error=" + std::to_string(error));
+                serviceError(error);
             }
             const auto wait = WaitForSingleObject(owner.get(), 20);
             if (wait == WAIT_OBJECT_0 || wait == WAIT_ABANDONED) {
                 ReleaseMutex(owner.get());
+                log("stopProcess owner released role=" + name +
+                    " stop_signals=" + std::to_string(signals));
                 return;
             }
             if (wait != WAIT_TIMEOUT) {
-                serviceError();
+                const auto error = GetLastError();
+                log("stopProcess owner wait failed role=" + name +
+                    " wait=" + std::to_string(wait) +
+                    " error=" + std::to_string(error));
+                serviceError(error);
             }
         } while (GetTickCount64() < end);
+        log("stopProcess timed out role=" + name +
+            " stop_signals=" + std::to_string(signals) +
+            " timeout_ms=3000");
         serviceError(ERROR_TIMEOUT);
+    }
+    static std::string roleName(const wchar_t *role) {
+        return role && wcscmp(role, L"Settings") == 0 ? "Settings" : "Core";
+    }
+    void log(std::string message) const noexcept {
+        if (logger_) {
+            try {
+                logger_(message);
+            } catch (...) {
+            }
+        }
     }
     std::filesystem::path core_;
     std::wstring identity_;
+    Logger logger_;
     ServiceHandle control_;
     bool locked_ = false;
 };
