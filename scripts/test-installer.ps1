@@ -181,6 +181,8 @@ try {
     }
     Assert-Path ([string]$properties.NativeUninstaller)
     Assert-Path $uninstallKey
+    $x86Dll = Join-Path $InstallRoot 'tsf/x86/fcitx5-x86.dll'
+    $x64Dll = Join-Path $InstallRoot 'tsf/fcitx5-x86_64.dll'
     if ($Architecture -eq 'arm64') {
         $arm64Dll = Join-Path $InstallRoot 'tsf/fcitx5-arm64.dll'
         Assert-TsfRegistration -DllPath $arm64Dll -Architecture arm64 -ProfileDllPath @($arm64Dll) -ModernApps:$ModernApps
@@ -190,8 +192,6 @@ try {
         Invoke-ProcessChecked -FilePath $nativeRegistrar -ArgumentList @('/s', "`"$arm64Dll`"") | Out-Null
         Assert-TsfRegistration -DllPath $arm64Dll -Architecture arm64 -ProfileDllPath @($arm64Dll) -ModernApps:$ModernApps
     } else {
-        $x86Dll = Join-Path $InstallRoot 'tsf/x86/fcitx5-x86.dll'
-        $x64Dll = Join-Path $InstallRoot 'tsf/fcitx5-x86_64.dll'
         # CTF TIP profile/category keys are shared; COM servers remain view-specific.
         # Either registrar can supply the shared icon; both DLLs belong to this install.
         $profileDlls = @($x64Dll, $x86Dll)
