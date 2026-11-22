@@ -10,6 +10,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
+if ($Architecture -eq 'arm64' -and
+    [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString() -ne 'Arm64') {
+    throw 'ARM64 installer smoke test must run from a native ARM64 PowerShell process.'
+}
 $installer = (Resolve-Path -LiteralPath $InstallerPath).Path
 if ([IO.Path]::GetExtension($installer) -ine '.exe') {
     throw "InstallerPath must point to an .exe: $installer"
@@ -195,6 +199,7 @@ try {
         Assert-TsfRegistration -DllPath $arm64Dll -Architecture arm64 -ProfileDllPath @($arm64Dll) -ModernApps:$ModernApps
         # System32 is the native ARM64 registrar on the Windows 11 ARM runner.
         $nativeRegistrar = Join-Path $env:WINDIR 'System32/regsvr32.exe'
+        Assert-PeMachine $nativeRegistrar arm64
         Invoke-ProcessChecked -FilePath $nativeRegistrar -ArgumentList @('/s', '/u', "`"$arm64Dll`"") | Out-Null
         Invoke-ProcessChecked -FilePath $nativeRegistrar -ArgumentList @('/s', "`"$arm64Dll`"") | Out-Null
         Assert-TsfRegistration -DllPath $arm64Dll -Architecture arm64 -ProfileDllPath @($arm64Dll) -ModernApps:$ModernApps
