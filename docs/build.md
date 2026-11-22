@@ -17,7 +17,7 @@ the additional plugin build path is still AMD64-specific.
 
 The ARM64 package uses an x86 Inno Setup bootstrapper (run by Windows on Arm's
 x86 emulation), restricted to Windows 11 ARM64 (build 22000+) and configured
-for 64-bit install mode. Its Core, TSF, Settings, helpers and bundled dependencies are ARM64.
+for 64-bit install mode. Its Core, TSF, Settings, helpers and installed runtime payloads are ARM64; Microsoft prerequisite installers are signed bootstrappers (the VC++ ARM64 redistributable uses an x86 bootstrapper).
 See [Install in the README](../README.md#install) and
 [installer implementation](windows-installer-design.md).
 
@@ -507,8 +507,9 @@ covers only ARM64 Core + ARM64 TSF: no ARM64/x64 mixed IPC or DLL combinations
 are part of the supported matrix.
 
 The workflow also builds ARM64 base installers with an x86 Inno Setup
-bootstrapper restricted to ARM64 Windows and 64-bit install mode. All installed
-application binaries and bundled runtime prerequisites are ARM64. A native
+bootstrapper restricted to Windows 11 ARM64 and 64-bit install mode. All
+installed application binaries and runtime payloads are ARM64; Microsoft
+prerequisite installers may use an x86 bootstrapper. A native
 Windows 11 ARM smoke job runs install, TSF registration and uninstall. The
 Nightly release includes both ARM64 base variants; the ARM64 full-plugin edition
 is deferred until the additional plugin build dependencies support ARM64.
