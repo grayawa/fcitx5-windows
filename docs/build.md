@@ -29,8 +29,9 @@ tools and runtimes are already installed):
 | Component | Requirements |
 | --- | --- |
 | Shared tools | CMake 3.27+, Git and PowerShell |
-| Core / input methods | MSYS2 `clang64` Clang, Ninja, pkgconf, ECM, dlfcn, libuv, gettext, Boost headers/iostreams and zstd; pinned libime/`fcitx5-chinese-addons` data supplies Pinyin, Shuangpin and base table methods |
-| Full plugin edition | Git LFS; matching `clang64` `mingw-w64-clang-x86_64-librime` and `mingw-w64-clang-x86_64-librime-data` for Rime; `clang64` `glib2` and `db` for Zhuyin |
+| Core / input methods (x64) | MSYS2 `clang64` Clang, Ninja, pkgconf, ECM, dlfcn, libuv, gettext, Boost headers/iostreams and zstd; pinned libime/`fcitx5-chinese-addons` data supplies Pinyin, Shuangpin and base table methods |
+| Native ARM64 Core / TSF | MSYS2 `clangarm64` toolchain and matching ARM64 packages; Visual Studio ARM64 C++ toolchain for Setup/Settings components |
+| Full plugin edition (currently x64) | Git LFS; matching `clang64` `mingw-w64-clang-x86_64-librime` and `mingw-w64-clang-x86_64-librime-data` for Rime; `clang64` `glib2` and `db` for Zhuyin |
 | TSF | Standalone LLVM (`clang`, `clang++`, `llvm-rc`; LLVM 22+ required with MSVC 14.52+, CI pins `22.1.8`), Windows SDK, x64/x86 MSVC tools and ATL, ImageMagick (`magick`) |
 | Settings | Visual Studio MSVC x64 tools, MSBuild, NuGet and Windows SDK 10.0.22000.0+ |
 | Settings runtime | x64 Windows App SDK 1.8 Framework/DDLM >= `8000.994.2142.0` and Visual C++ runtime for the current user |
