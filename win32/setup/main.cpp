@@ -19,6 +19,12 @@ namespace upgrade = fcitx::setup::upgrade;
 constexpr wchar_t kClsidKey[] = L"SOFTWARE\\Classes\\CLSID\\{FC3869BA-51E3-"
                                 L"4078-8EE2-5FE49493A1F4}\\InprocServer32";
 
+#if defined(_M_ARM64)
+constexpr wchar_t kNativeTsfDll[] = L"tsf/fcitx5-arm64.dll";
+#else
+constexpr wchar_t kNativeTsfDll[] = L"tsf/fcitx5-x86_64.dll";
+#endif
+
 bool administrator() {
     SID_IDENTIFIER_AUTHORITY authority = SECURITY_NT_AUTHORITY;
     PSID sid = nullptr;
@@ -49,7 +55,7 @@ std::wstring registryString(HKEY root, const wchar_t *key, const wchar_t *name,
 
 bool ownsRegistration(const fs::path &root) {
     for (const auto &[view, relative] :
-         {std::pair{RRF_SUBKEY_WOW6464KEY, L"tsf/fcitx5-x86_64.dll"},
+         {std::pair{RRF_SUBKEY_WOW6464KEY, kNativeTsfDll},
           std::pair{RRF_SUBKEY_WOW6432KEY, L"tsf/x86/fcitx5-x86.dll"}}) {
         const auto path =
             registryString(HKEY_LOCAL_MACHINE, kClsidKey, nullptr, view);
@@ -252,7 +258,7 @@ DWORD registration(const fs::path &root, bool uninstall) {
             return code;
         x86Registrar = fs::path(directory) / L"regsvr32.exe";
     }
-    const auto dll = root / "tsf" / "fcitx5-x86_64.dll";
+    const auto dll = root / kNativeTsfDll;
     if (uninstall && !fs::exists(dll)) {
         const auto profiles = fcitx::UnregisterCategoriesAndProfiles();
         const auto server = fcitx::UnregisterServer();
