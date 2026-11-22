@@ -421,7 +421,10 @@ jobs:
       - name: Build native ARM64 WinUI Settings
         shell: pwsh
         run: |
-          ./scripts/build-settings.ps1 -Architecture ARM64 `
+          # The ARM64 i18n static library is built with the runner's VS 18
+          # MSVC 14.52 toolset (v145). Keep the WinUI link step on that same
+          # STL/CRT toolset instead of the project file's legacy v143 default.
+          ./scripts/build-settings.ps1 -Architecture ARM64 -PlatformToolset v145 `
             -Prefix ./dist/ci-arm64 -BuildRoot ./build/ci-arm64/settings `
             -BoostSource ./build/ci-arm64/tsf/_deps/native_boost-src `
             -BoostHeaders "$env:MSYS2_ROOT/clangarm64/include"
