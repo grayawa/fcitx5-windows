@@ -352,6 +352,8 @@ jobs:
             mingw-w64-clang-aarch64-zstd
             mingw-w64-clang-aarch64-glib2
             mingw-w64-clang-aarch64-db
+            mingw-w64-clang-aarch64-imagemagick
+            mingw-w64-clang-aarch64-librsvg
 
       - name: Add ARM64 MSYS2 tools to PATH
         shell: pwsh
@@ -363,6 +365,20 @@ jobs:
           }
           "$env:MSYS2_LOCATION/clangarm64/bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           "MSYS2_ROOT=$env:MSYS2_LOCATION" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Verify native ARM64 SVG tooling
+        shell: pwsh
+        run: |
+          $magick = Get-Command magick.exe -CommandType Application -ErrorAction Stop
+          $rsvg = Get-Command rsvg-convert.exe -CommandType Application -ErrorAction Stop
+          Write-Host "ImageMagick: $($magick.Source)"
+          Write-Host "librsvg: $($rsvg.Source)"
+          $icon = Join-Path $env:RUNNER_TEMP 'fcitx5-penguin-arm64.ico'
+          & $magick.Source -background none "$PWD/win32/assets/penguin.svg" $icon
+          if ($LASTEXITCODE -ne 0 -or !(Test-Path $icon)) {
+            throw 'ImageMagick could not convert the TSF SVG icon using the native ARM64 librsvg delegate.'
+          }
+          Remove-Item -LiteralPath $icon -Force
 
       - name: Read locked Pinyin data metadata
         id: arm64-data-lock
