@@ -3,6 +3,7 @@
 #include "../ipc/isolationpolicy.h"
 #include "../setup/log.h"
 #include "../setup/upgrade.h"
+#include "../setup/architecture.h"
 #include <cassert>
 #include <cstring>
 #include <iostream>
@@ -83,7 +84,7 @@ LSTATUS WINAPI closeKey(HKEY key) {
 int main() {
     namespace upgrade = fcitx::setup::upgrade;
     const fs::path root = L"C:\\Fcitx5 install";
-    const auto x64 = root / "tsf/fcitx5-x86_64.dll";
+    const auto x64 = root / fcitx::setup::kNativeTsfDll;
     const auto x86 = root / "tsf/x86/fcitx5-x86.dll";
     const auto server64 = std::wstring(clsidKey) + L"/x64";
     const auto server32 = std::wstring(clsidKey) + L"/x86";
@@ -105,7 +106,7 @@ int main() {
     }
     upgrade::Manifest single;
     single.version = "1.2.3";
-    single.files.push_back({"tsf/fcitx5-x86_64.dll"});
+    single.files.push_back({fcitx::setup::kNativeTsfDll});
     auto dual = single;
     dual.files.push_back({"tsf/x86/fcitx5-x86.dll"});
     const auto machine = upgrade::nativeMachine(root);
