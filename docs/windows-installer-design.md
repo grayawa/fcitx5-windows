@@ -95,7 +95,7 @@ x64 安装器配置为 `SetupArchitecture=x64`、`ArchitecturesAllowed=x64os`、
 
 1. 已有 helper 时执行 `preflight-machine`，拒绝冲突注册或安装根下待重启删除项（发现待删项返回 `3010`）。已有受管理安装且关闭延迟升级时，暂停服务、写入 `maintenance` 并检查占用，发现占用则退出并恢复。
 2. 含运行库版先安装 VC++ 运行库，再复制完整运行树。安装器设置 `CloseApplications=no`、`RestartApplications=no`，不终止第三方应用。
-3. 从最终路径注册双架构 TSF 并写入 `installed`。含运行库版安装 Windows App Runtime，再以原始用户执行 `configure-user` 验证 bootstrap（必要时在该用户下重试运行库安装）。
+3. 从最终路径按安装包架构注册 TSF 并写入 `installed`：x64 包注册 x64/x86 双视图，ARM64 包只注册 ARM64 TSF。含运行库版安装对应架构的 Windows App Runtime，再以原始用户执行 `configure-user` 验证 bootstrap（必要时在该用户下重试运行库安装）。
 4. `configure-user` 备份旧默认项，调用 `InstallLayoutOrTip`（不使用 `ILOT_CLEANINSTALL`，不改登录屏幕）启用 Fcitx5；仅首次初始化时设置默认并激活，随后重启 Core 并轮询就绪。
 5. 若用户配置或后续步骤失败，执行补偿回滚（`rollback-user`、注销并标记 `pending`）。
 
@@ -108,7 +108,7 @@ x64 安装器配置为 `SetupArchitecture=x64`、`ArchitecturesAllowed=x64os`、
 开始菜单与 Windows 已安装应用卸载入口指向 `setup/maintenance-host/Fcitx5Upgrade.exe uninstall --prefix <root>`：
 
 - 普通权限阶段处理当前用户输入项恢复（仅当当前默认仍为 Fcitx5 时恢复原项或有效替代项）并优雅停止服务。
-- 提权阶段协调待升级事务、写 `maintenance`、查询占用、注销双视图 TSF 并调用 Inno 原生卸载器（`/NORESTART /HELPER=1`，静默时加 `/VERYSILENT /SUPPRESSMSGBOXES`），最后清理动态状态及升级所有权清单中的新增文件。
+- 提权阶段协调待升级事务、写 `maintenance`、查询占用、注销当前安装包所包含的 TSF 架构（x64 包注销 x64/x86 双视图，ARM64 包注销原生 ARM64 TSF）并调用 Inno 原生卸载器（`/NORESTART /HELPER=1`，静默时加 `/VERYSILENT /SUPPRESSMSGBOXES`），最后清理动态状态及升级所有权清单中的新增文件。
 - 文件使用 `uninsrestartdelete`：若存在 DLL 占用且原生卸载成功，返回 `ERROR_SUCCESS_REBOOT_REQUIRED`（`3010`），不调用 `RmShutdown` 或按进程名强杀应用。
 - 保留 `%APPDATA%/Fcitx5` 用户数据及共享 VC++/Windows App Runtime。正式安装请使用上述卸载入口，而非开发用 PowerShell 脚本。
 
