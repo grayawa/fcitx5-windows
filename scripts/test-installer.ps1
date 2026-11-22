@@ -158,7 +158,12 @@ try {
         throw "Installer runtime manifest architecture mismatch: expected $Architecture, got $($runtimeManifest.architecture)."
     }
     if ($Architecture -eq 'arm64' -and $runtimeManifest.dependencies.Count -gt 0) {
-        Assert-Path (Join-Path $InstallRoot 'setup/WindowsAppRuntimeInstall-arm64.exe')
+        $appRuntimeInstaller = Join-Path $InstallRoot 'setup/WindowsAppRuntimeInstall-arm64.exe'
+        Assert-Path $appRuntimeInstaller
+        $signature = Get-AuthenticodeSignature $appRuntimeInstaller
+        if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'CN=Microsoft Corporation') {
+            throw "ARM64 Windows App Runtime installer signature is invalid: $($signature.Status)"
+        }
     }
     if ($Architecture -eq 'arm64' -and
         ((Test-Path -LiteralPath (Join-Path $InstallRoot 'tsf/fcitx5-x86_64.dll')) -or
@@ -173,7 +178,7 @@ try {
             Assert-PeMachine (Join-Path $InstallRoot $relative) arm64
         }
         foreach ($image in Get-ChildItem -LiteralPath $InstallRoot -Recurse -File |
-                Where-Object { ($_.Extension -in @('.exe', '.dll')) -and $_.Name -notlike 'unins*.exe' }) {
+                Where-Object { ($_.Extension -in @('.exe', '.dll')) -and $_.Name -notlike 'unins*.exe' -and $_.Name -ne 'WindowsAppRuntimeInstall-arm64.exe' }) {
             Assert-PeMachine $image.FullName arm64
         }
     } else {
