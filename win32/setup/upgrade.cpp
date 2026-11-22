@@ -566,6 +566,8 @@ DWORD Engine::complete(bool /*recover*/) {
                        ? ERROR_SUCCESS_REBOOT_REQUIRED
                        : code;
         }
+        DWORD completionResult = ERROR_SUCCESS;
+        bool completionHandledFailure = false;
         try {
             const auto dependency = machine_.dependencies(transaction_, target);
             if (dependency) {
@@ -638,12 +640,18 @@ DWORD Engine::complete(bool /*recover*/) {
             guards.clear();
             if (fs::exists(transaction_ / "commit-ready"))
                 throw;
-            if (stateAt(transaction_) == "validating") {
-                defer(DWORD(error.code().value()));
-                return DWORD(error.code().value());
-            }
-            return rollback(DWORD(error.code().value()));
+            const DWORD code = DWORD(error.code().value());
+            if (stateAt(transaction_) == "validating")
+                defer(code);
+            else
+                completionResult = rollback(code);
+            if (stateAt(transaction_) == "validating")
+                completionResult = code;
+            completionHandledFailure = true;
         }
+        // Return only after the caught exception has left scope.
+        if (completionHandledFailure)
+            return completionResult;
         return cleanup();
     } catch (const std::system_error &error) {
         if (hasTransaction(root_)) {
