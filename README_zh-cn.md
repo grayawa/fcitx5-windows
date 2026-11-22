@@ -2,9 +2,9 @@
 
 [English](README.md)
 
-面向 AMD64 的 Fcitx5 Windows 移植版本（持续开发中）。Core 在独立进程中运行，x64 与 x86 TSF DLL 负责与应用程序集成，WinUI 3 设置程序管理输入法列表和引擎配置。
+面向 AMD64 和 ARM64 的 Fcitx5 Windows 移植版本（持续开发中）。Core 在独立进程中运行；x64 应用使用 x64/x86 TSF DLL，Windows on Arm 使用原生 ARM64 TSF DLL，WinUI 3 设置程序管理输入法列表和引擎配置。
 
-`base` 版提供拼音、双拼和 `fcitx5-chinese-addons` 码表输入法；`full` 版额外提供 Mozc（日语）、Rime、温州话、注音和 `fcitx5-table-extra`。统一 x64 安装包已接入 CI 打包与 Nightly 发布流程。
+`base` 版提供拼音、双拼和 `fcitx5-chinese-addons` 码表输入法；x64 `full` 版额外提供 Mozc（日语）、Rime、温州话、注音和 `fcitx5-table-extra`。CI/Nightly 发布 x64 base/full 安装包和 ARM64 base 安装包。
 
 ## 功能
 
@@ -33,7 +33,7 @@
 
 ## 安装
 
-[Nightly 发布](https://github.com/WAAutoMaton/fcitx5-windows/releases/tag/latest)提供四种 x64 安装包及其 SHA256 校验文件，适用于 Windows 10 1809（build 17763）及以上版本。两种版本均包含 Core、x64/x86 TSF DLL 和 Settings：
+[Nightly 发布](https://github.com/WAAutoMaton/fcitx5-windows/releases/tag/latest)提供四种 x64 安装包和两种 ARM64 base 安装包，并附带 SHA256 校验文件。x64 安装包适用于 Windows 10 x64 1809（build 17763）及以上版本，包含 x64 Core、x64/x86 TSF DLL 和 Settings：
 
 - `base`：内置 `fcitx5-chinese-addons`。
 - `full`：内置 `fcitx5-chinese-addons`、`fcitx5-mozc`、`fcitx5-rime`、`fcitx5-table-extra`、`fcitx5-wenzhounese` 和 `fcitx5-zhuyin`。
@@ -43,7 +43,12 @@
 - `Fcitx5-<run>-<base|full>-x64-setup.exe`：附带 Visual C++ 和 Windows App Runtime 安装程序。
 - `Fcitx5-<run>-<base|full>-x64-no-runtime-setup.exe`：需预先为当前用户安装 Visual C++ 运行库和 x64 Windows App SDK 1.8 Framework/DDLM >= `8000.994.2142.0`。
 
-安装器将完整运行树部署到 Program Files，注册共享同一 x64 Core 的 x64/x86 TSF DLL，配置安装发起用户的输入法并启动 Core。可选登录启动默认不勾选，且遵守手动关闭服务状态。详见[安装说明](docs/windows-installer-design.md)。
+ARM64 base 安装包也提供两种运行库组合：
+
+- `Fcitx5-<run>-base-arm64-setup.exe`：附带 ARM64 Visual C++ 和 Windows App Runtime 安装程序。
+- `Fcitx5-<run>-base-arm64-no-runtime-setup.exe`：需预先为当前用户安装 ARM64 Visual C++ 运行库和 ARM64 Windows App SDK 1.8 Framework/DDLM >= `8000.994.2142.0`。
+
+ARM64 包使用可在 Windows on Arm x86 模拟环境运行的 x86 Inno Setup 引导程序，但安装的 Core、TSF、Settings、helper 和运行库均为原生 ARM64，只支持 ARM64 Core + ARM64 TSF。x64 包仍使用 x64 Core 和 x64/x86 TSF。安装器将运行树部署到 Program Files，配置安装发起用户的输入法并启动 Core。可选登录启动默认不勾选，且遵守手动关闭服务状态。详见[安装说明](docs/windows-installer-design.md)。
 
 升级时完整暂存新版并在等待重启期间保持当前版本可用，暂存成功返回 `3010`，重启 Windows 后完成提交。状态查询、取消与恢复见[重启升级说明](docs/windows-reboot-upgrade-design.md)。
 
@@ -51,7 +56,7 @@
 
 ## 构建与部署
 
-环境要求：CMake 3.27+、Git、MSYS2 `clang64` 依赖、独立 LLVM（配合 MSVC 14.52+ 时需 LLVM 22+）、ImageMagick，以及带 C++ 工具、Windows SDK、ATL、MSBuild 和 NuGet 的 Visual Studio。运行 Settings 还需 Visual C++ 运行库和 x64 Windows App SDK 1.8 Framework/DDLM >= `8000.994.2142.0`。完整依赖与路径见[前置条件](docs/build.md#prerequisites)。
+环境要求：CMake 3.27+、Git、MSYS2 `clang64`（x64）或 `clangarm64`（原生 ARM64）依赖、独立 LLVM（配合 MSVC 14.52+ 时需 LLVM 22+）、ImageMagick，以及带 C++ 工具、Windows SDK、ATL、MSBuild 和 NuGet 的 Visual Studio。运行 Settings 还需对应架构的 Visual C++ 运行库和 Windows App SDK 1.8 Framework/DDLM >= `8000.994.2142.0`。完整依赖与路径见[前置条件](docs/build.md#prerequisites)。
 
 在仓库根目录的 Windows PowerShell 中运行以下命令构建并部署 `base` 版：
 
