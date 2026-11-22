@@ -198,5 +198,5 @@ int main() {
     assert(!fs::exists(prefix));
     std::cout
         << "PASS: concurrent start, single instance, manual stop, restart, "
-           "settings lifetime and missing executable\n";
+           "settings lifetime, missing executable and restart-state recovery\n";
 }
