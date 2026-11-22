@@ -312,6 +312,7 @@ architecture-specific validation and x64 packaging in parallel jobs
 | Job | Responsibility |
 | --- | --- |
 | `build-x64` | Install pinned LLVM `22.1.8` and MSYS2 deps; build `base` with `-ModernApps -SkipTests`; copy and build all additional plugins for `full`; verify Wenzhounese, `table-extra` (Wubi98/Cangjie5/Jyutping Table) and Zhuyin commits plus Zhuyin model save/reload (`zhuyin_model_probe`); upload base/full runtimes, portable TSF tests/probes and standalone Settings |
+| `build-arm64` | Build native ARM64 Core, TSF and WinUI Settings; run the ARM64 TSF CTest suite; audit runtime/probe PE machine types; upload ARM64 runtime and integration probes |
 | `test-x64` | Download `base` runtime and portable tests; run `test-build-and-deploy.ps1`, `test-build-plugins.ps1`, `test-installer-registration.ps1`, icon MD5 check, `test-pinyin.ps1` (including CTest), `test-inputmethods.ps1`, `test-engine-localization.ps1` and `test-dictionaries.ps1` |
 | `test-x86` | Install pinned LLVM `22.1.8`; build/test independent x86 TSF; run x86 Pinyin/TSF probes with concurrent x86/x64 Pipe clients (`-PeerTsfBuild`) and dual-arch deployment checks (`test-deploy-tsf.ps1`) |
 | `test-arm64` | Run native ARM64 Core/TSF integration on Windows 11 ARM; verify ARM64 PE images, Pinyin/TSF IPC, input-method persistence, localization and dictionary loading; test concurrent ARM64/x64 clients and wrong-architecture DLL rejection |
@@ -321,9 +322,10 @@ architecture-specific validation and x64 packaging in parallel jobs
 
 `test-x64`, `test-x86` and `package-installer-x64` start in parallel as soon as
 `build-x64` finishes. `test-arm64` waits for both architecture builds so it can
-exercise native ARM64 clients alongside the x64 peer probes. The portable test bundle exports a relative-path manifest
-via `ctest --show-only=json-v1` and restores CTest entries on the test runner
-without reconfiguring CMake. Installer artifacts use compression level 0.
+exercise native ARM64 clients alongside the x64 peer probes. The x64 portable
+test bundle exports a relative-path manifest via `ctest --show-only=json-v1`
+and restores CTest entries on the test runner without reconfiguring CMake.
+Installer artifacts use compression level 0.
 
 ## Build Installer Packages
 
