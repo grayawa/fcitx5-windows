@@ -64,7 +64,13 @@ try {
         New-Item -ItemType Directory -Force (Split-Path $path) | Out-Null
         Set-Content -LiteralPath $path -Value 'fixture' -Encoding ascii
     }
-    foreach ($pair in @(@('tsf/fcitx5-x86_64.dll', 0x8664), @('tsf/x86/fcitx5-x86.dll', 0x14c))) {
+    foreach ($pair in @(
+            @('bin/Fcitx5.exe', 0x8664),
+            @('tsf/fcitx5-x86_64.dll', 0x8664),
+            @('tsf/x86/fcitx5-x86.dll', 0x14c),
+            @('setup/Fcitx5SetupHelper.exe', 0x8664),
+            @('setup/Fcitx5Upgrade.exe', 0x8664),
+            @('settings/Fcitx5Settings.exe', 0x8664))) {
         $bytes = New-Object byte[] 88
         $bytes[0] = 0x4d; $bytes[1] = 0x5a; $bytes[0x3c] = 64
         $bytes[64] = 0x50; $bytes[65] = 0x45
