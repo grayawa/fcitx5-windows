@@ -190,7 +190,18 @@ int main() {
         test.stage();
         test.machine.boot = false;
         test.machine.registrationError = true;
-        assert(test.engine.complete() == ERROR_INSTALL_FAILURE);
+        const auto rollbackResult = test.engine.complete();
+        if (rollbackResult != ERROR_INSTALL_FAILURE) {
+            std::cerr << "Registration-failure rollback returned "
+                      << rollbackResult << " (expected "
+                      << ERROR_INSTALL_FAILURE << "), state="
+                      << upgrade::transactionState(test.root)
+                      << ", query=" << test.engine.query()
+                      << ", restores=" << test.machine.restores
+                      << ", activeVersion=" << test.machine.activeVersion
+                      << '\\n';
+        }
+        assert(rollbackResult == ERROR_INSTALL_FAILURE);
         test.oldVersion();
         assert(test.machine.restores == 1);
         assert(!test.machine.armed);
