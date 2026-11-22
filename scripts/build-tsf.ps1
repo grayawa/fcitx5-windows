@@ -1,6 +1,6 @@
 [CmdletBinding(SupportsShouldProcess)]
 param(
-    [ValidateSet('x64', 'x86')][string]$Architecture = 'x64',
+    [ValidateSet('x64', 'x86', 'arm64')][string]$Architecture = 'x64',
     [string]$BuildRoot = '',
     [string]$LLVMRoot = 'C:/Program Files/LLVM',
     [string]$BoostSource = '',
@@ -25,8 +25,12 @@ if (Test-Path -LiteralPath $cache) {
     }
 }
 $vswhere = "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe"
-$vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 Microsoft.VisualStudio.Component.VC.ATLMFC -property installationPath
-if ($LASTEXITCODE -ne 0 -or !$vs) { throw 'Visual Studio C++ tools, Windows SDK and ATL are required.' }
+if ($Architecture -eq 'arm64') {
+    $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.ARM64 -property installationPath
+} else {
+    $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 Microsoft.VisualStudio.Component.VC.ATLMFC -property installationPath
+}
+if ($LASTEXITCODE -ne 0 -or !$vs) { throw "Visual Studio C++ tools for $Architecture, Windows SDK and required libraries are required." }
 $cmake = (Get-Command cmake.exe -CommandType Application | Select-Object -First 1).Source
 $ninja = (Get-Command ninja.exe -CommandType Application | Select-Object -First 1).Source
 $before = @{}
@@ -46,8 +50,13 @@ function Invoke-TsfBuild([string]$Executable, [string[]]$Arguments) {
     if ($LASTEXITCODE -ne 0) { throw "$Executable failed ($LASTEXITCODE)." }
 }
 try {
-    $target = if ($Architecture -eq 'x86') { 'x86' } else { 'amd64' }
-    $variables = & cmd.exe /d /c "`"$vs/Common7/Tools/VsDevCmd.bat`" -arch=$target -host_arch=amd64 >nul && set"
+    $target = switch ($Architecture) {
+        'x86' { 'x86' }
+        'arm64' { 'arm64' }
+        default { 'amd64' }
+    }
+    $hostArchitecture = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'amd64' }
+    $variables = & cmd.exe /d /c "`"$vs/Common7/Tools/VsDevCmd.bat`" -arch=$target -host_arch=$hostArchitecture >nul && set"
     if ($LASTEXITCODE -ne 0) { throw 'Visual Studio environment initialization failed.' }
     foreach ($line in $variables) {
         if ($line -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') }
@@ -61,7 +70,11 @@ try {
         "-DCMAKE_RC_COMPILER=$LLVMRoot/bin/llvm-rc.exe", "-DCMAKE_MAKE_PROGRAM=$ninja",
         "-DTSF_ARCH=$Architecture", "-DENABLE_MODERN_TSF_CATEGORIES=$($ModernApps.IsPresent.ToString().ToUpperInvariant())") + $options)
     Invoke-TsfBuild $cmake @('--build', $BuildRoot, '-j', "$Jobs")
-    $name = if ($Architecture -eq 'x86') { 'fcitx5-x86.dll' } else { 'fcitx5-x86_64.dll' }
+    $name = switch ($Architecture) {
+        'x86' { 'fcitx5-x86.dll' }
+        'arm64' { 'fcitx5-arm64.dll' }
+        default { 'fcitx5-x86_64.dll' }
+    }
     & "$root/win32/scripts/check-tsf-runtime.ps1" -DllPath "$BuildRoot/dll/$name" -Architecture $Architecture
     if (!$SkipTests) {
         Invoke-TsfBuild (Join-Path (Split-Path $cmake) 'ctest.exe') @('--test-dir', $BuildRoot, '--output-on-failure')

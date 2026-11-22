@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$MSYS2Root = 'C:/msys64',
+    [ValidateSet('AMD64', 'ARM64')][string]$Architecture = 'AMD64',
     [string]$DependencyPrefix = '',
     [string]$Prefix = '',
     [string]$BuildRoot = '',
@@ -22,8 +23,9 @@ $Prefix = [IO.Path]::GetFullPath($Prefix).Replace('\', '/')
 if (!$Prefix.StartsWith(([IO.Path]::GetFullPath($root).Replace('\', '/') + '/'), [StringComparison]::OrdinalIgnoreCase)) {
     throw 'The installation prefix must be inside this repository.'
 }
-$sysroot = "$MSYS2Root/clang64"
-if (!(Test-Path "$sysroot/bin/clang++.exe")) { throw 'MSYS2 clang64 is required.' }
+$environment = if ($Architecture -eq 'ARM64') { 'clangarm64' } else { 'clang64' }
+$sysroot = "$MSYS2Root/$environment"
+if (!(Test-Path "$sysroot/bin/clang++.exe")) { throw "MSYS2 $environment is required." }
 $lock = Get-Content "$root/cmake/pinyin-lock.json" -Raw | ConvertFrom-Json
 
 function Invoke-Checked([string]$Executable, [string[]]$Arguments) {
@@ -87,8 +89,10 @@ function Get-VerifiedArchive([string[]]$Urls, [string]$Destination, [string]$Has
 & "$PSScriptRoot/apply-pinyin-patches.ps1"
 $oldPath = $env:PATH
 $oldMSYS2Root = $env:MSYS2_ROOT
+$oldMSYSTEMPrefix = $env:MSYSTEM_PREFIX
 try {
     $env:MSYS2_ROOT = $MSYS2Root
+    $env:MSYSTEM_PREFIX = $sysroot
     $runtimeDirectories = @("$sysroot/bin")
     if ($DependencyPrefix) { $runtimeDirectories = @("$DependencyPrefix/bin") + $runtimeDirectories }
     $env:PATH = "$Prefix/bin;" + ($runtimeDirectories -join ';') + ";$MSYS2Root/usr/bin;$oldPath"
@@ -97,7 +101,7 @@ try {
         "-DCMAKE_MAKE_PROGRAM=$sysroot/bin/ninja.exe")
     $localeOptions = @()
     if ($BoostSource) { $localeOptions += "-DFETCHCONTENT_SOURCE_DIR_NATIVE_BOOST=$([IO.Path]::GetFullPath($BoostSource))" }
-    Invoke-Checked 'cmake' (@('-S', $root, '-B', "$BuildRoot/pinyin-core", '-DARCH=AMD64',
+    Invoke-Checked 'cmake' (@('-S', $root, '-B', "$BuildRoot/pinyin-core", "-DARCH=$Architecture",
         '-DENABLE_WINDOWS_ASCII_FALLBACK=OFF', '-DENABLE_KEYBOARD=OFF',
         "-DWINDOWS_DEPENDENCY_PREFIX=$DependencyPrefix") + $common + $localeOptions)
     Invoke-Checked 'cmake' @('--build', "$BuildRoot/pinyin-core", '-j', "$Jobs")
@@ -190,4 +194,5 @@ try {
 } finally {
     $env:PATH = $oldPath
     $env:MSYS2_ROOT = $oldMSYS2Root
+    $env:MSYSTEM_PREFIX = $oldMSYSTEMPrefix
 }

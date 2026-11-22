@@ -473,3 +473,11 @@ first; unverified owners are skipped). Stop Core/Settings from the indicator
 menu beforehand. Supply `-HandlePath` if Sysinternals Handle is not in `PATH`;
 otherwise the script falls back to `tasklist /m` and accessible module lists.
 `-WhatIf` makes no system changes and needs no elevation.
+
+## ARM64 Windows CI
+
+The CI workflow also builds the native ARM64 Core, TSF frontend and WinUI
+Settings application on a GitHub-hosted Windows 11 ARM64 runner. It uses the
+MSYS2 `CLANGARM64` environment and the Visual Studio ARM64 toolchain. The
+result is uploaded as a separate `Fcitx5-runtime-arm64` artifact; the current
+Nightly installer and release assets remain x64-only.
