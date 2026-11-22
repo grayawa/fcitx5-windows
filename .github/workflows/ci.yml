@@ -661,6 +661,231 @@ jobs:
             dist/installer/*.sha256
             dist/installer/*.txt
 
+  package-installer-arm64:
+    needs: build-arm64
+    runs-on: windows-2025
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [runtime, no-runtime]
+    steps:
+      - name: Disable CRLF
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Download native ARM64 runtime tree
+        uses: actions/download-artifact@v8
+        with:
+          name: Fcitx5-runtime-arm64
+          path: dist/installer-stage
+
+      - name: Install Inno Setup compiler
+        run: winget install --id JRSoftware.InnoSetup.7 -e --silent --accept-source-agreements --accept-package-agreements
+
+      - name: Check Inno Setup compiler
+        shell: pwsh
+        run: |
+          $iscc = Get-ChildItem 'C:/Program Files (x86)/Inno Setup 7', 'C:/Program Files/Inno Setup 7', "$env:LOCALAPPDATA/Programs/Inno Setup 7" -Filter ISCC.exe -File -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (!$iscc) { throw 'ISCC.exe was not installed.' }
+          $version = (& $iscc.FullName --version | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0 -or $version -notmatch '^7\.\d+\.\d+(?:\..*)?(?:-.*)?    needs: package-installer-x64
+    runs-on: windows-2025
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [base, full]
+    steps:
+      - name: Disable CRLF
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v6
+
+      - name: Download installer artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: Fcitx5-installer-${{ matrix.edition }}-x64-no-runtime
+          path: dist/installer
+
+      - name: Run install and uninstall smoke test
+        shell: pwsh
+        run: |
+          $installer = @(Get-ChildItem dist/installer -Filter '*-x64-no-runtime-setup.exe' -File)
+          if ($installer.Count -ne 1) { throw "Expected exactly one no-runtime installer, found $($installer.Count)." }
+          ./scripts/test-installer.ps1 -InstallerPath $installer[0].FullName -ModernApps
+
+      - name: Upload installer smoke logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: installer-smoke-${{ matrix.edition }}-logs
+          if-no-files-found: warn
+          path: build/installer-smoke
+
+  installer-smoke-arm64:
+    needs: [package-installer-arm64, test-arm64]
+    runs-on: windows-11-arm
+    timeout-minutes: 20
+    steps:
+      - name: Disable CRLF
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v6
+
+      - name: Download ARM64 no-runtime installer
+        uses: actions/download-artifact@v8
+        with:
+          name: Fcitx5-installer-base-arm64-no-runtime
+          path: dist/installer
+
+      - name: Run ARM64 install and uninstall smoke test
+        shell: pwsh
+        run: |
+          $installer = @(Get-ChildItem dist/installer -Filter '*-base-arm64-no-runtime-setup.exe' -File)
+          if ($installer.Count -ne 1) { throw "Expected exactly one ARM64 no-runtime installer, found $($installer.Count)." }
+          ./scripts/test-installer.ps1 -Architecture arm64 -InstallerPath $installer[0].FullName -ModernApps
+
+      - name: Upload ARM64 installer smoke logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: installer-smoke-arm64-logs
+          if-no-files-found: warn
+          path: build/installer-smoke
+
+  release:
+    needs: [build-x64, test-x64, test-x86, build-arm64, test-arm64, package-installer-x64, installer-smoke-x64, package-installer-arm64, installer-smoke-arm64]
+    if: ${{ github.ref == 'refs/heads/master' && !contains(github.event.head_commit.message, '!release') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: nightly-release
+      cancel-in-progress: false
+    steps:
+      - name: Download installer artifact
+        uses: actions/download-artifact@v8
+        with:
+          pattern: Fcitx5-installer-*
+          merge-multiple: true
+
+      - name: Create Nightly release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          shopt -s failglob
+          files=(
+            Fcitx5-*-base-x64-setup.exe{,.sha256}
+            Fcitx5-*-base-x64-no-runtime-setup.exe{,.sha256}
+            Fcitx5-*-full-x64-setup.exe{,.sha256}
+            Fcitx5-*-full-x64-no-runtime-setup.exe{,.sha256}
+            Fcitx5-*-base-arm64-setup.exe{,.sha256}
+            Fcitx5-*-base-arm64-no-runtime-setup.exe{,.sha256}
+          )
+
+          release_id=$(gh api "repos/$GH_REPO/releases" --paginate \
+            --jq '.[] | select(.tag_name == "latest") | .id')
+          tag_ref=$(gh api "repos/$GH_REPO/git/matching-refs/tags/latest" \
+            --jq '.[] | select(.ref == "refs/tags/latest") | .ref')
+          if [[ -n "$release_id" ]]; then
+            gh api --method DELETE "repos/$GH_REPO/releases/$release_id"
+          fi
+          if [[ -n "$tag_ref" ]]; then
+            gh api --method PATCH "repos/$GH_REPO/git/refs/tags/latest" \
+              -f sha="$GITHUB_SHA" -F force=true
+          else
+            gh api --method POST "repos/$GH_REPO/git/refs" \
+              -f ref=refs/tags/latest -f sha="$GITHUB_SHA"
+          fi
+          gh release create latest "${files[@]}" --verify-tag \
+            --title 'Nightly Build' --prerelease --generate-notes
+) { throw "Inno Setup 7 is required, got: $version" }
+          Write-Output "Using $($iscc.FullName)"
+          Write-Output "Inno Setup version: $version"
+          Get-AuthenticodeSignature $iscc.FullName | Format-List Status,SignerCertificate
+          "FCITX5_ISCC_PATH=$($iscc.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Download and verify ARM64 runtime dependencies
+        if: matrix.runtime == 'runtime'
+        shell: pwsh
+        run: |
+          $lock = Get-Content cmake/installer-lock.json -Raw | ConvertFrom-Json
+          $vc = $lock.vcRuntimeArm64
+          $appRuntime = $lock.windowsAppRuntimeArm64
+          New-Item -ItemType Directory -Force build/installer-deps | Out-Null
+          Invoke-WebRequest -Uri $vc.url -OutFile "build/installer-deps/$($vc.file)"
+          Invoke-WebRequest -Uri $appRuntime.url -OutFile "build/installer-deps/$($appRuntime.file)"
+          if ((Get-FileHash "build/installer-deps/$($vc.file)" -Algorithm SHA256).Hash -ne $vc.sha256) {
+            throw 'ARM64 VC++ runtime hash mismatch.'
+          }
+          . ./win32/scripts/pe-machine.ps1
+          Assert-PeMachine "build/installer-deps/$($vc.file)" arm64
+          Assert-PeMachine "build/installer-deps/$($appRuntime.file)" arm64
+          foreach ($file in @($vc.file, $appRuntime.file)) {
+            $signature = Get-AuthenticodeSignature "build/installer-deps/$file"
+            if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'CN=Microsoft Corporation') {
+              throw "ARM64 runtime dependency has no valid Microsoft signature: $file ($($signature.Status))"
+            }
+          }
+          Write-Output "Windows App Runtime ARM64 SHA256: $((Get-FileHash "build/installer-deps/$($appRuntime.file)" -Algorithm SHA256).Hash.ToLowerInvariant())"
+
+      - name: Test architecture-aware installer packaging
+        run: ./scripts/test-build-installer.ps1
+
+      - name: Build ARM64 installer
+        shell: pwsh
+        run: |
+          $skipRuntimes = '${{ matrix.runtime }}' -eq 'no-runtime'
+          $suffix = if ($skipRuntimes) { '-no-runtime' } else { '' }
+          $package = 'Fcitx5-${{ github.run_number }}-base-arm64' + $suffix + '-setup'
+          ./scripts/build-installer.ps1 -Architecture arm64 -IsccPath $env:FCITX5_ISCC_PATH -Prefix ./dist/installer-stage -Dependencies ./build/installer-deps -Output ./dist/installer -PackageVersion 0.1.${{ github.run_number }}.0 -PackageName $package -SkipRuntimes:$skipRuntimes
+          "FCITX5_PACKAGE=$package" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Verify ARM64 installer metadata and bootstrapper architecture
+        shell: pwsh
+        run: |
+          . ./win32/scripts/pe-machine.ps1
+          $installer = "dist/installer/$env:FCITX5_PACKAGE.exe"
+          foreach ($suffix in @('.exe', '.exe.sha256', '.manifest.txt')) {
+            if (!(Test-Path -LiteralPath "dist/installer/$env:FCITX5_PACKAGE$suffix" -PathType Leaf)) {
+              throw "ARM64 installer output missing: $env:FCITX5_PACKAGE$suffix"
+            }
+          }
+          # Inno's x86 Setup runs under WoA emulation; its installed payload is native ARM64.
+          Assert-PeMachine $installer x86
+          $manifest = Get-Content -Raw "dist/installer/metadata/$env:FCITX5_PACKAGE.runtime.json" | ConvertFrom-Json
+          if ($manifest.architecture -ne 'arm64' -or
+              @($manifest.files | Where-Object path -eq 'tsf/fcitx5-arm64.dll').Count -ne 1 -or
+              @($manifest.files | Where-Object path -match 'fcitx5-x86_64|tsf/x86/').Count -ne 0) {
+            throw 'ARM64 installer manifest contains the wrong TSF architecture.'
+          }
+          if ('${{ matrix.runtime }}' -eq 'runtime') {
+            if (@($manifest.dependencies | Where-Object path -eq 'vc_redist.arm64.exe').Count -ne 1 -or
+                @($manifest.dependencies | Where-Object path -eq 'WindowsAppRuntimeInstall-arm64.exe').Count -ne 1) {
+              throw 'ARM64 installer is missing architecture-matched runtime dependencies.'
+            }
+          } elseif ($manifest.dependencies.Count -ne 0) {
+            throw 'No-runtime ARM64 package unexpectedly contains runtime dependencies.'
+          }
+
+      - name: Upload ARM64 installer artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: Fcitx5-installer-base-arm64-${{ matrix.runtime }}
+          compression-level: 0
+          if-no-files-found: error
+          path: |
+            dist/installer/*.exe
+            dist/installer/*.sha256
+            dist/installer/*.txt
+
   installer-smoke-x64:
     needs: package-installer-x64
     runs-on: windows-2025
