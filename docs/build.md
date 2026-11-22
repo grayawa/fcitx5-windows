@@ -16,8 +16,8 @@ The ARM64 installer currently contains the native ARM64 base runtime only;
 the additional plugin build path is still AMD64-specific.
 
 The ARM64 package uses an x86 Inno Setup bootstrapper (run by Windows on Arm's
-x86 emulation), restricted to ARM64 Windows and configured for 64-bit install
-mode. Its Core, TSF, Settings, helpers and bundled dependencies are ARM64.
+x86 emulation), restricted to Windows 11 ARM64 (build 22000+) and configured
+for 64-bit install mode. Its Core, TSF, Settings, helpers and bundled dependencies are ARM64.
 See [Install in the README](../README.md#install) and
 [installer implementation](windows-installer-design.md).
 
