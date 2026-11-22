@@ -305,20 +305,23 @@ signed/installed modern apps remain pending.
 
 ## CI Build and Artifact Flow
 
-CI builds each x64 component once in Release and runs validation and packaging
-in parallel jobs (`.github/workflows/ci.yml`):
+CI builds the x64 and native ARM64 components in Release and runs
+architecture-specific validation and x64 packaging in parallel jobs
+(`.github/workflows/ci.yml`):
 
 | Job | Responsibility |
 | --- | --- |
 | `build-x64` | Install pinned LLVM `22.1.8` and MSYS2 deps; build `base` with `-ModernApps -SkipTests`; copy and build all additional plugins for `full`; verify Wenzhounese, `table-extra` (Wubi98/Cangjie5/Jyutping Table) and Zhuyin commits plus Zhuyin model save/reload (`zhuyin_model_probe`); upload base/full runtimes, portable TSF tests/probes and standalone Settings |
 | `test-x64` | Download `base` runtime and portable tests; run `test-build-and-deploy.ps1`, `test-build-plugins.ps1`, `test-installer-registration.ps1`, icon MD5 check, `test-pinyin.ps1` (including CTest), `test-inputmethods.ps1`, `test-engine-localization.ps1` and `test-dictionaries.ps1` |
 | `test-x86` | Install pinned LLVM `22.1.8`; build/test independent x86 TSF; run x86 Pinyin/TSF probes with concurrent x86/x64 Pipe clients (`-PeerTsfBuild`) and dual-arch deployment checks (`test-deploy-tsf.ps1`) |
+| `test-arm64` | Run native ARM64 Core/TSF integration on Windows 11 ARM; verify ARM64 PE images, Pinyin/TSF IPC, input-method persistence, localization and dictionary loading; test concurrent ARM64/x64 clients and wrong-architecture DLL rejection |
 | `package-installer-x64` | 2×2 matrix (`base`/`full` × `runtime`/`no-runtime`); run `test-build-installer.ps1`, `test-installer-wizard.ps1` and `test-installer-restart.ps1`; build installer; verify `table-extra` and Zhuyin manifests in `full` / absence in `base` |
 | `installer-smoke-x64` | Run silent machine-only install, modern TSF registration checks, uninstall and cleanup for both `base` and `full` no-runtime installers |
 | `release` | After all jobs succeed on `master` (unless commit message contains `!release`), replace the `latest` prerelease with the four installers and their SHA256 files |
 
 `test-x64`, `test-x86` and `package-installer-x64` start in parallel as soon as
-`build-x64` finishes. The portable test bundle exports a relative-path manifest
+`build-x64` finishes. `test-arm64` waits for both architecture builds so it can
+exercise native ARM64 clients alongside the x64 peer probes. The portable test bundle exports a relative-path manifest
 via `ctest --show-only=json-v1` and restores CTest entries on the test runner
 without reconfiguring CMake. Installer artifacts use compression level 0.
 
@@ -476,8 +479,10 @@ otherwise the script falls back to `tasklist /m` and accessible module lists.
 
 ## ARM64 Windows CI
 
-The CI workflow also builds the native ARM64 Core, TSF frontend and WinUI
-Settings application on a GitHub-hosted Windows 11 ARM64 runner. It uses the
-MSYS2 `CLANGARM64` environment and the Visual Studio ARM64 toolchain. The
-result is uploaded as a separate `Fcitx5-runtime-arm64` artifact; the current
-Nightly installer and release assets remain x64-only.
+The CI workflow builds the native ARM64 Core, TSF frontend and WinUI
+Settings application on a GitHub-hosted Windows 11 ARM64 runner, using MSYS2
+`CLANGARM64` and the Visual Studio ARM64 toolchain. It uploads separate
+`Fcitx5-runtime-arm64` and `Fcitx5-tests-arm64` artifacts. The `test-arm64`
+job runs the Pinyin/TSF, input-method persistence, localization and dictionary
+integration probes natively, and checks simultaneous ARM64/x64 Pipe clients.
+The current Nightly installer and release assets remain x64-only.

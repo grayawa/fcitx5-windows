@@ -1,9 +1,19 @@
 [CmdletBinding()]
-param([string]$Prefix = '', [string]$TsfBuild = '')
+param(
+    [string]$Prefix = '',
+    [string]$TsfBuild = '',
+    [ValidateSet('x64', 'x86', 'arm64')][string]$Architecture = 'x64'
+)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 if (!$Prefix) { $Prefix = "$root/dist/inputmethods" }
 if (!$TsfBuild) { $TsfBuild = "$root/build/inputmethods/tsf" }
+$dllName = switch ($Architecture) {
+    'x86' { 'fcitx5-x86.dll' }
+    'arm64' { 'fcitx5-arm64.dll' }
+    default { 'fcitx5-x86_64.dll' }
+}
+$dll = (Resolve-Path "$TsfBuild/dll/$dllName").Path
 if (Get-Process Fcitx5,Fcitx5Settings -ErrorAction SilentlyContinue) { throw 'Core or Settings is already running; isolated tests need a free service endpoint.' }
 $log = "$root/build/inputmethods-test/$([guid]::NewGuid().ToString('N'))"
 New-Item -ItemType Directory -Force $log | Out-Null
@@ -39,7 +49,7 @@ try {
     if ($LASTEXITCODE) { throw 'Pinyin IPC regression failed.' }
     & "$TsfBuild/tests/settings_probe.exe"
     if ($LASTEXITCODE) { throw 'Legacy settings regression failed.' }
-    & "$TsfBuild/tests/tsf_probe.exe" "$TsfBuild/dll/fcitx5-x86_64.dll"
+    & "$TsfBuild/tests/tsf_probe.exe" $dll
     if ($LASTEXITCODE) { throw 'TSF regression failed.' }
     & "$TsfBuild/tests/inputmethods_probe.exe" --persistence-write
     if ($LASTEXITCODE) { throw 'Persistence setup failed.' }
@@ -50,7 +60,7 @@ try {
     Start-TestCore
     & "$TsfBuild/tests/inputmethods_probe.exe" --persistence-read
     if ($LASTEXITCODE) { throw 'Persistence check failed.' }
-    & "$TsfBuild/tests/tsf_probe.exe" "$TsfBuild/dll/fcitx5-x86_64.dll" --cycles
+    & "$TsfBuild/tests/tsf_probe.exe" $dll --cycles
     if ($LASTEXITCODE) { throw 'Multi-method TSF shortcut regression failed.' }
     Write-Output "Logs: $log"
 } finally {

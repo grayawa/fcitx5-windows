@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param([string]$Prefix = '', [string]$TsfBuild = '',
-    [ValidateSet('x64', 'x86')][string]$Architecture = 'x64', [string]$PeerTsfBuild = '')
+    [ValidateSet('x64', 'x86', 'arm64')][string]$Architecture = 'x64',
+    [string]$PeerTsfBuild = '', [switch]$SkipCTest)
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -10,7 +11,11 @@ $core = (Resolve-Path "$Prefix/bin/Fcitx5.exe").Path
 $probe = (Resolve-Path "$TsfBuild/tests/ipc_probe.exe").Path
 $tsfProbe = (Resolve-Path "$TsfBuild/tests/tsf_probe.exe").Path
 $settingsProbe = (Resolve-Path "$TsfBuild/tests/settings_probe.exe").Path
-$dllName = if ($Architecture -eq 'x86') { 'fcitx5-x86.dll' } else { 'fcitx5-x86_64.dll' }
+$dllName = switch ($Architecture) {
+    'x86' { 'fcitx5-x86.dll' }
+    'arm64' { 'fcitx5-arm64.dll' }
+    default { 'fcitx5-x86_64.dll' }
+}
 $dll = (Resolve-Path "$TsfBuild/dll/$dllName").Path
 $log = "$root/build/pinyin-test"
 New-Item -ItemType Directory -Force $log | Out-Null
@@ -42,8 +47,10 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Pinyin settings regression failed.' }
     & $tsfProbe $dll
     if ($LASTEXITCODE -ne 0) { throw 'Pinyin TSF integration failed.' }
-    & ctest --test-dir $TsfBuild --output-on-failure
-    if ($LASTEXITCODE -ne 0) { throw 'CTest failed.' }
+    if (!$SkipCTest) {
+        & ctest --test-dir $TsfBuild --output-on-failure
+        if ($LASTEXITCODE -ne 0) { throw 'CTest failed.' }
+    }
 } finally {
     if (!$process.HasExited) {
         Stop-Process -Id $process.Id

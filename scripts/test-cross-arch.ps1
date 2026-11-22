@@ -5,12 +5,23 @@ $root = Split-Path $PSScriptRoot -Parent
 . "$root/win32/scripts/pe-machine.ps1"
 $probes = @((Resolve-Path "$TsfBuild/tests/ipc_probe.exe").Path,
     (Resolve-Path "$PeerTsfBuild/tests/ipc_probe.exe").Path)
+$dllNames = @{
+    0x14c = 'fcitx5-x86.dll'
+    0x8664 = 'fcitx5-x86_64.dll'
+    0xaa64 = 'fcitx5-arm64.dll'
+}
+$architectureNames = @{
+    0x14c = 'x86'
+    0x8664 = 'x64'
+    0xaa64 = 'ARM64'
+}
 $machines = @($probes | ForEach-Object { Get-PeMachine $_ } | Sort-Object -Unique)
-if ($machines.Count -ne 2 -or 0x14c -notin $machines -or 0x8664 -notin $machines) {
-    throw 'Cross-architecture regression requires both x86 and x64 probes.'
+if ($machines.Count -ne 2 -or @($machines | Where-Object { !$dllNames.ContainsKey($_) }).Count) {
+    throw 'Cross-architecture regression requires two different supported PE architectures.'
 }
 foreach ($pair in @(@($TsfBuild, $PeerTsfBuild), @($PeerTsfBuild, $TsfBuild))) {
-    $name = if ((Get-PeMachine "$($pair[1])/tests/ipc_probe.exe") -eq 0x14c) { 'fcitx5-x86.dll' } else { 'fcitx5-x86_64.dll' }
+    $peerMachine = Get-PeMachine "$($pair[1])/tests/ipc_probe.exe"
+    $name = $dllNames[$peerMachine]
     & "$($pair[0])/tests/test_tsf_runtime_host.exe" "$($pair[1])/dll/$name" --wrong-arch
     if ($LASTEXITCODE -ne 0) { throw 'Wrong-architecture DLL rejection failed.' }
 }
@@ -40,7 +51,8 @@ try {
     if ($children[1].HasExited) { throw 'Second client was interrupted by the first disconnect.' }
     $null = $events[3].Set()
     if (!$children[1].WaitForExit(5000) -or $children[1].ExitCode -ne 0) { throw 'Second client cleanup failed.' }
-    Write-Output "PASS: x86/x64 Pipe clients share $($servers[0]); disconnect preserves the peer."
+    $labels = @($machines | ForEach-Object { $architectureNames[$_] })
+    Write-Output "PASS: $($labels -join '/') Pipe clients share $($servers[0]); disconnect preserves the peer."
 } finally {
     foreach ($event in $events) { $null = $event.Set() }
     foreach ($child in $children) {
