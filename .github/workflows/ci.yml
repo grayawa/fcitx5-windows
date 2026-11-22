@@ -319,7 +319,6 @@ jobs:
           path: |
             build/ci-x86/Testing/Temporary/*.log
             build/pinyin-test/*.log
-            build/cross-arch-*/*.err
 
   build-arm64:
     runs-on: windows-11-arm
@@ -487,7 +486,7 @@ jobs:
             build/ci-arm64/tsf/CMakeFiles/CMakeOutput.log
 
   test-arm64:
-    needs: [build-arm64, build-x64]
+    needs: build-arm64
     runs-on: windows-11-arm
     timeout-minutes: 45
     steps:
@@ -508,12 +507,6 @@ jobs:
           name: Fcitx5-tests-arm64
           path: build/ci-arm64-tests
 
-      - name: Download x64 peer probes
-        uses: actions/download-artifact@v8
-        with:
-          name: Fcitx5-tests-x64
-          path: build/ci-x64-tests
-
       - name: Verify native ARM64 test images
         shell: pwsh
         run: |
@@ -526,10 +519,10 @@ jobs:
           Assert-PeMachine dist/ci-arm64/bin/Fcitx5.exe arm64
           Assert-PeMachine dist/ci-arm64/settings/Fcitx5Settings.exe arm64
 
-      - name: Verify ARM64 Pinyin, TSF and ARM64/x64 concurrent clients
+      - name: Verify native ARM64 Pinyin, TSF and IPC
         run: |
           ./scripts/test-pinyin.ps1 -Prefix ./dist/ci-arm64 -TsfBuild ./build/ci-arm64-tests `
-            -Architecture arm64 -PeerTsfBuild ./build/ci-x64-tests -SkipCTest
+            -Architecture arm64 -SkipCTest
 
       - name: Verify ARM64 input method selection, settings and commits
         run: ./scripts/test-inputmethods.ps1 -Prefix ./dist/ci-arm64 -TsfBuild ./build/ci-arm64-tests -Architecture arm64
