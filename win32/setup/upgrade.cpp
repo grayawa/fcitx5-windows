@@ -641,12 +641,12 @@ DWORD Engine::complete(bool /*recover*/) {
             if (fs::exists(transaction_ / "commit-ready"))
                 throw;
             const DWORD code = DWORD(error.code().value());
-            if (stateAt(transaction_) == "validating")
+            if (stateAt(transaction_) == "validating") {
                 defer(code);
-            else
-                completionResult = rollback(code);
-            if (stateAt(transaction_) == "validating")
                 completionResult = code;
+            } else {
+                completionResult = rollback(code);
+            }
             completionHandledFailure = true;
         }
         // Return only after the caught exception has left scope.
