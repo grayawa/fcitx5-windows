@@ -820,14 +820,30 @@ jobs:
       - name: Download ARM64 no-runtime installer
         uses: actions/download-artifact@v8
         with:
-          name: Fcitx5-installer-base-arm64-no-runtime
+          name: Fcitx5-installer-base-arm64-runtime
           path: dist/installer
+
+      - name: Install ARM64 VC runtime for the native setup helper
+        shell: pwsh
+        run: |
+          $lock = Get-Content cmake/installer-lock.json -Raw | ConvertFrom-Json
+          $vc = $lock.vcRuntimeArm64
+          $path = "build/installer-deps/$($vc.file)"
+          New-Item -ItemType Directory -Force (Split-Path $path) | Out-Null
+          Invoke-WebRequest -Uri $vc.url -OutFile $path
+          if ((Get-FileHash $path -Algorithm SHA256).Hash -ne $vc.sha256) { throw 'ARM64 VC++ runtime hash mismatch.' }
+          $signature = Get-AuthenticodeSignature $path
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'CN=Microsoft Corporation') {
+            throw "ARM64 VC++ runtime signature is invalid: $($signature.Status)"
+          }
+          $process = Start-Process -FilePath (Resolve-Path $path).Path -ArgumentList '/install /quiet /norestart' -Wait -PassThru
+          if ($process.ExitCode -notin @(0, 1638, 3010)) { throw "ARM64 VC++ runtime installation failed: $($process.ExitCode)" }
 
       - name: Run ARM64 install and uninstall smoke test
         shell: pwsh
         run: |
-          $installer = @(Get-ChildItem dist/installer -Filter '*-base-arm64-no-runtime-setup.exe' -File)
-          if ($installer.Count -ne 1) { throw "Expected exactly one ARM64 no-runtime installer, found $($installer.Count)." }
+          $installer = @(Get-ChildItem dist/installer -Filter '*-base-arm64-setup.exe' -File)
+          if ($installer.Count -ne 1) { throw "Expected exactly one ARM64 runtime installer, found $($installer.Count)." }
           ./scripts/test-installer.ps1 -Architecture arm64 -InstallerPath $installer[0].FullName -ModernApps
 
       - name: Upload ARM64 installer smoke logs
