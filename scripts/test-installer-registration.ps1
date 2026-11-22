@@ -173,4 +173,4 @@ Assert-Failure { Assert-TsfRegistration -DllPath $dll -ProfileDllPath @($dll, $x
 $registry[$profile].IconFile = $dll
 $registry[$x86Server].'(default)' = $dll
 Assert-Failure { Assert-TsfRegistration -DllPath $x86Dll -Architecture x86 -ProfileDllPath @($dll, $x86Dll) -ModernApps } 'TSF COM registration'
-Write-Output 'PASS: desktop/modern categories, both COM views, shared profile icons and smoke registrar sequence (mock registry; no installation).'
+Write-Output 'PASS: desktop/modern categories, x86/x64/ARM64 COM views, shared profile icons and x64 smoke registrar sequence (mock registry; no installation).'
