@@ -692,121 +692,7 @@ jobs:
           $iscc = Get-ChildItem 'C:/Program Files (x86)/Inno Setup 7', 'C:/Program Files/Inno Setup 7', "$env:LOCALAPPDATA/Programs/Inno Setup 7" -Filter ISCC.exe -File -ErrorAction SilentlyContinue | Select-Object -First 1
           if (!$iscc) { throw 'ISCC.exe was not installed.' }
           $version = (& $iscc.FullName --version | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0 -or $version -notmatch '^7\.\d+\.\d+(?:\..*)?(?:-.*)?    needs: package-installer-x64
-    runs-on: windows-2025
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        edition: [base, full]
-    steps:
-      - name: Disable CRLF
-        run: git config --global core.autocrlf false
-
-      - uses: actions/checkout@v6
-
-      - name: Download installer artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: Fcitx5-installer-${{ matrix.edition }}-x64-no-runtime
-          path: dist/installer
-
-      - name: Run install and uninstall smoke test
-        shell: pwsh
-        run: |
-          $installer = @(Get-ChildItem dist/installer -Filter '*-x64-no-runtime-setup.exe' -File)
-          if ($installer.Count -ne 1) { throw "Expected exactly one no-runtime installer, found $($installer.Count)." }
-          ./scripts/test-installer.ps1 -InstallerPath $installer[0].FullName -ModernApps
-
-      - name: Upload installer smoke logs
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: installer-smoke-${{ matrix.edition }}-logs
-          if-no-files-found: warn
-          path: build/installer-smoke
-
-  installer-smoke-arm64:
-    needs: [package-installer-arm64, test-arm64]
-    runs-on: windows-11-arm
-    timeout-minutes: 20
-    steps:
-      - name: Disable CRLF
-        run: git config --global core.autocrlf false
-
-      - uses: actions/checkout@v6
-
-      - name: Download ARM64 no-runtime installer
-        uses: actions/download-artifact@v8
-        with:
-          name: Fcitx5-installer-base-arm64-no-runtime
-          path: dist/installer
-
-      - name: Run ARM64 install and uninstall smoke test
-        shell: pwsh
-        run: |
-          $installer = @(Get-ChildItem dist/installer -Filter '*-base-arm64-no-runtime-setup.exe' -File)
-          if ($installer.Count -ne 1) { throw "Expected exactly one ARM64 no-runtime installer, found $($installer.Count)." }
-          ./scripts/test-installer.ps1 -Architecture arm64 -InstallerPath $installer[0].FullName -ModernApps
-
-      - name: Upload ARM64 installer smoke logs
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: installer-smoke-arm64-logs
-          if-no-files-found: warn
-          path: build/installer-smoke
-
-  release:
-    needs: [build-x64, test-x64, test-x86, build-arm64, test-arm64, package-installer-x64, installer-smoke-x64, package-installer-arm64, installer-smoke-arm64]
-    if: ${{ github.ref == 'refs/heads/master' && !contains(github.event.head_commit.message, '!release') }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    concurrency:
-      group: nightly-release
-      cancel-in-progress: false
-    steps:
-      - name: Download installer artifact
-        uses: actions/download-artifact@v8
-        with:
-          pattern: Fcitx5-installer-*
-          merge-multiple: true
-
-      - name: Create Nightly release
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          shopt -s failglob
-          files=(
-            Fcitx5-*-base-x64-setup.exe{,.sha256}
-            Fcitx5-*-base-x64-no-runtime-setup.exe{,.sha256}
-            Fcitx5-*-full-x64-setup.exe{,.sha256}
-            Fcitx5-*-full-x64-no-runtime-setup.exe{,.sha256}
-            Fcitx5-*-base-arm64-setup.exe{,.sha256}
-            Fcitx5-*-base-arm64-no-runtime-setup.exe{,.sha256}
-          )
-
-          release_id=$(gh api "repos/$GH_REPO/releases" --paginate \
-            --jq '.[] | select(.tag_name == "latest") | .id')
-          tag_ref=$(gh api "repos/$GH_REPO/git/matching-refs/tags/latest" \
-            --jq '.[] | select(.ref == "refs/tags/latest") | .ref')
-          if [[ -n "$release_id" ]]; then
-            gh api --method DELETE "repos/$GH_REPO/releases/$release_id"
-          fi
-          if [[ -n "$tag_ref" ]]; then
-            gh api --method PATCH "repos/$GH_REPO/git/refs/tags/latest" \
-              -f sha="$GITHUB_SHA" -F force=true
-          else
-            gh api --method POST "repos/$GH_REPO/git/refs" \
-              -f ref=refs/tags/latest -f sha="$GITHUB_SHA"
-          fi
-          gh release create latest "${files[@]}" --verify-tag \
-            --title 'Nightly Build' --prerelease --generate-notes
-) { throw "Inno Setup 7 is required, got: $version" }
+          if ($LASTEXITCODE -ne 0 -or $version -notmatch '^7\.\d+\.\d+(?:\..*)?(?:-.*)?$') { throw "Inno Setup 7 is required, got: $version" }
           Write-Output "Using $($iscc.FullName)"
           Write-Output "Inno Setup version: $version"
           Get-AuthenticodeSignature $iscc.FullName | Format-List Status,SignerCertificate
@@ -921,8 +807,39 @@ jobs:
           if-no-files-found: warn
           path: build/installer-smoke
 
+  installer-smoke-arm64:
+    needs: [package-installer-arm64, test-arm64]
+    runs-on: windows-11-arm
+    timeout-minutes: 20
+    steps:
+      - name: Disable CRLF
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v6
+
+      - name: Download ARM64 no-runtime installer
+        uses: actions/download-artifact@v8
+        with:
+          name: Fcitx5-installer-base-arm64-no-runtime
+          path: dist/installer
+
+      - name: Run ARM64 install and uninstall smoke test
+        shell: pwsh
+        run: |
+          $installer = @(Get-ChildItem dist/installer -Filter '*-base-arm64-no-runtime-setup.exe' -File)
+          if ($installer.Count -ne 1) { throw "Expected exactly one ARM64 no-runtime installer, found $($installer.Count)." }
+          ./scripts/test-installer.ps1 -Architecture arm64 -InstallerPath $installer[0].FullName -ModernApps
+
+      - name: Upload ARM64 installer smoke logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: installer-smoke-arm64-logs
+          if-no-files-found: warn
+          path: build/installer-smoke
+
   release:
-    needs: [build-x64, test-x64, test-x86, build-arm64, test-arm64, package-installer-x64, installer-smoke-x64]
+    needs: [build-x64, test-x64, test-x86, build-arm64, test-arm64, package-installer-x64, installer-smoke-x64, package-installer-arm64, installer-smoke-arm64]
     if: ${{ github.ref == 'refs/heads/master' && !contains(github.event.head_commit.message, '!release') }}
     runs-on: ubuntu-latest
     permissions:
@@ -934,7 +851,7 @@ jobs:
       - name: Download installer artifact
         uses: actions/download-artifact@v8
         with:
-          pattern: Fcitx5-installer-*-x64-*
+          pattern: Fcitx5-installer-*
           merge-multiple: true
 
       - name: Create Nightly release
@@ -950,6 +867,8 @@ jobs:
             Fcitx5-*-base-x64-no-runtime-setup.exe{,.sha256}
             Fcitx5-*-full-x64-setup.exe{,.sha256}
             Fcitx5-*-full-x64-no-runtime-setup.exe{,.sha256}
+            Fcitx5-*-base-arm64-setup.exe{,.sha256}
+            Fcitx5-*-base-arm64-no-runtime-setup.exe{,.sha256}
           )
 
           release_id=$(gh api "repos/$GH_REPO/releases" --paginate \
