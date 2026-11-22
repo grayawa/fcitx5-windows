@@ -1,5 +1,6 @@
 #include "../ipc/installation.h"
 #include "../setup/upgrade.h"
+#include "../setup/architecture.h"
 #include <boost/property_tree/json_parser.hpp>
 #include <cassert>
 #include <iostream>
@@ -14,7 +15,7 @@ void saveManifest(const fs::path &root, const std::vector<std::string> &files,
                   std::string_view version) {
     Tree tree, list, dependencies;
     tree.put("schemaVersion", 1);
-    tree.put("architecture", "x64");
+    tree.put("architecture", fcitx::setup::kNativeArchitecture);
     tree.put("protocolVersion", fcitx::win32::ipc::kVersion);
     tree.put("version", version);
     tree.put("package", "test-package");
@@ -94,7 +95,7 @@ class Fixture {
           source(root / "source"), machine(root), engine(root, machine) {
         fs::create_directories(root / "setup");
         fs::create_directories(source / "setup");
-        paths = {"bin/Fcitx5.exe",         "tsf/fcitx5-x86_64.dll",
+        paths = {"bin/Fcitx5.exe",         fcitx::setup::kNativeTsfDll,
                  "tsf/x86/fcitx5-x86.dll", "setup/Fcitx5SetupHelper.exe",
                  "setup/managed-install",  "settings/Fcitx5Settings.exe",
                  "share/data.txt"};
@@ -129,8 +130,8 @@ class Fixture {
                "installed\n");
     }
     void oldVersion() {
-        assert(upgrade::readText(root / "tsf/fcitx5-x86_64.dll") ==
-               "old:tsf/fcitx5-x86_64.dll");
+        assert(upgrade::readText(root / fcitx::setup::kNativeTsfDll) ==
+               "old:" + std::string(fcitx::setup::kNativeTsfDll));
         assert(upgrade::readText(root / "tsf/x86/fcitx5-x86.dll") ==
                "old:tsf/x86/fcitx5-x86.dll");
         assert(upgrade::readText(root / "bin/Fcitx5.exe") ==
@@ -155,7 +156,7 @@ int main() {
         assert(test.engine.complete() == ERROR_SUCCESS_REBOOT_REQUIRED);
         test.machine.boot = false;
         {
-            upgrade::FileGuard occupied(test.root / "tsf/fcitx5-x86_64.dll");
+            upgrade::FileGuard occupied(test.root / fcitx::setup::kNativeTsfDll);
             assert(test.engine.complete() == ERROR_SUCCESS_REBOOT_REQUIRED);
             assert(upgrade::transactionState(test.root) == "staged");
         }
