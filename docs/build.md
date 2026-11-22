@@ -353,9 +353,10 @@ to select `ISCC.exe` explicitly):
 Bundled-runtime x64 builds require `vc_redist.x64.exe` and
 `WindowsAppRuntimeInstall-x64.exe`; ARM64 builds require `vc_redist.arm64.exe`
 and `WindowsAppRuntimeInstall-arm64.exe`. The pinned VC++ hashes and Microsoft
-publisher/version metadata are in `cmake/installer-lock.json`; the ARM64
-Windows App Runtime installer is verified by its Microsoft Authenticode
-signature and ARM64 PE machine type. `-Architecture arm64` selects the
+publisher/version metadata are in `cmake/installer-lock.json`. The ARM64
+VC++ redistributable is an x86 Microsoft-signed bootstrapper that installs the
+ARM64 runtime; the Windows App Runtime installer is checked for its Microsoft
+Authenticode signature. The installed application PE files are checked as ARM64. `-Architecture arm64` selects the
 ARM64-only payload and x86 Inno Setup bootstrapper. `-PackageVersion` defaults
 to `0.1.0.0`;
 `-PackageName` overrides the output basename. Each build outputs `.exe`,
