@@ -153,6 +153,9 @@ try {
     if ($runtimeManifest.architecture -ne $Architecture) {
         throw "Installer runtime manifest architecture mismatch: expected $Architecture, got $($runtimeManifest.architecture)."
     }
+    if ($Architecture -eq 'arm64' -and $runtimeManifest.dependencies.Count -gt 0) {
+        Assert-Path (Join-Path $InstallRoot 'setup/WindowsAppRuntimeInstall-arm64.exe')
+    }
     if ($Architecture -eq 'arm64' -and
         ((Test-Path -LiteralPath (Join-Path $InstallRoot 'tsf/fcitx5-x86_64.dll')) -or
          (Test-Path -LiteralPath (Join-Path $InstallRoot 'tsf/x86/fcitx5-x86.dll')))) {
