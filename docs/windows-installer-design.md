@@ -1,23 +1,25 @@
 # Windows 安装包实现与设计
 
-安装实现、`base`/`full` × 含/不含运行库四种打包、可选登录启动、默认延迟升级和 CI/Nightly 发布流程均已接入。CI 对 `base`/`full` 的不含运行库包运行机器级安装/注册/卸载 smoke；完整用户初始化、含运行库部署、升级与重启清理需干净 VM 验收。
+安装实现、x64 `base`/`full` × 含/不含运行库四种打包、ARM64 `base` × 含/不含运行库两种打包、可选登录启动、默认延迟升级和 CI/Nightly 发布流程均已接入。CI 对 x64 不含运行库包和 ARM64 含运行库包运行机器级安装/注册/卸载 smoke；完整用户初始化、干净 VM 升级与重启清理仍需验收。
 
 ## 交付与支持范围
 
-使用 Inno Setup 7 生成 x64 EXE，安装到 `<ProgramFiles>/Fcitx5`，内置共享同一 x64 Core 的独立 x64/x86 TSF。MSI 与原生 ARM64 TSF 尚未提供。
+x64 包使用 Inno Setup 7 生成 x64 EXE，安装到 `<ProgramFiles>/Fcitx5`，内置共享同一 x64 Core 的 x64/x86 TSF。ARM64 包使用 Inno Setup 生成 x86 Setup 引导程序（在 Windows on Arm 上经 x86 模拟运行），但限制仅在 ARM64 Windows 上安装，并启用 ARM64 64 位安装模式；实际 Core、TSF、Settings、helper 和运行库均为 ARM64。MSI 和原生 ARM64 Inno Setup 引导程序尚未提供。
 
 | CI 包名 | 运行库策略 |
 | --- | --- |
 | `Fcitx5-<run>-<edition>-x64-setup.exe` | 附带 Microsoft x64 VC++ Redistributable 与 Windows App Runtime 安装程序 |
-| `Fcitx5-<run>-<edition>-x64-no-runtime-setup.exe` | 需预先为当前用户安装上述运行库 |
+| `Fcitx5-<run>-<edition>-x64-no-runtime-setup.exe` | 需预先为当前用户安装上述 x64 运行库 |
+| `Fcitx5-<run>-base-arm64-setup.exe` | 附带 Microsoft ARM64 VC++ Redistributable 与 ARM64 Windows App Runtime 安装程序 |
+| `Fcitx5-<run>-base-arm64-no-runtime-setup.exe` | 需预先为当前用户安装上述 ARM64 运行库 |
 
-四种安装包均包含 Core、x64/x86 TSF、Settings 及原生安装/升级 helper：
+四种 x64 安装包包含 x64 Core、x64/x86 TSF、Settings 及 x64 安装/升级 helper。两种 ARM64 安装包仅包含 ARM64 Core、ARM64 TSF、ARM64 Settings 和 ARM64 helper，不包含 x64/x86 前端或后端：
 
 - `base`：内置 `fcitx5-chinese-addons`。
 - `full`：包含 `plugins/` 下全部插件（`fcitx5-chinese-addons`、`fcitx5-rime`、`fcitx5-table-extra`、`fcitx5-wenzhounese`、`fcitx5-zhuyin`），额外插件部署到 `plugins/<name>` 并纳入安装/升级所有权清单，见 [Windows 插件](windows-plugins.md)。
-- Settings 采用 framework-dependent Windows App SDK 1.8，要求当前用户已安装 x64 Framework/DDLM >= `8000.994.2142.0` 与 VC++ 运行库；不含运行库包在用户阶段仍会执行 `Fcitx5Settings.exe --runtime-check`。
+- Settings 采用 framework-dependent Windows App SDK 1.8。x64 Settings 要求当前用户安装 x64 Framework/DDLM >= `8000.994.2142.0` 与 x64 VC++ 运行库；ARM64 Settings 要求对应 ARM64 Framework/DDLM 与 ARM64 VC++ 运行库。不含运行库包在用户阶段仍会执行 `Fcitx5Settings.exe --runtime-check`。
 
-安装器配置为 `SetupArchitecture=x64`、`ArchitecturesAllowed=x64os`、64 位安装模式、`MinVersion=10.0.17763`（Windows 10 1809 x64，与锁定的 Windows App Runtime 1.8.12 MSIX 一致）、`PrivilegesRequired=admin` 与固定 AppId。x64 TSF 由原生 helper 注册，x86 TSF 通过 `SysWOW64/regsvr32.exe` 注册，两者共享 CLSID/profile 并使用独立 registry view（参见 [TSF 64 位平台说明](https://learn.microsoft.com/en-us/windows/win32/tsf/64-bit-platform-considerations)）。
+x64 安装器配置为 `SetupArchitecture=x64`、`ArchitecturesAllowed=x64os`、x64 安装模式；ARM64 安装器配置为 `SetupArchitecture=x86`、`ArchitecturesAllowed=arm64`、`ArchitecturesInstallIn64BitMode=arm64`。两者均使用 `MinVersion=10.0.17763`、`PrivilegesRequired=admin` 与固定 AppId。ARM64 Setup 引导程序通过 WoA x86 模拟运行，实际注册 helper 是 ARM64 原生程序；它只注册 ARM64 TSF，不加载或注册 x64/x86 TSF。x64 TSF 由原生 helper 注册，x86 TSF 通过 `SysWOW64/regsvr32.exe` 注册，两者共享 CLSID/profile 并使用独立 registry view（参见 [TSF 64 位平台说明](https://learn.microsoft.com/en-us/windows/win32/tsf/64-bit-platform-considerations)）。
 
 ## 实现入口
 
@@ -42,14 +44,22 @@
   lib/fcitx5/ + lib/libime/zh_CN.lm
   share/fcitx5/ + share/libime/sc.dict
   share/locale/ （Windows 与上游简体/繁体翻译）
+  # x64 package
   tsf/fcitx5-x86_64.dll
   tsf/x86/fcitx5-x86.dll
   settings/Fcitx5Settings.exe + DLL/PRI/WinMD
   setup/Fcitx5SetupHelper.exe
   setup/maintenance-host/Fcitx5Upgrade.exe
   setup/runtime-manifest.json
-  setup/managed-install + install-state
   setup/WindowsAppRuntimeInstall-x64.exe  （仅含运行库版）
+
+  # ARM64 package (native payload; x86 Inno Setup bootstrapper)
+  tsf/fcitx5-arm64.dll
+  settings/Fcitx5Settings.exe + ARM64 DLL/PRI/WinMD
+  setup/Fcitx5SetupHelper.exe
+  setup/maintenance-host/Fcitx5Upgrade.exe
+  setup/runtime-manifest.json
+  setup/WindowsAppRuntimeInstall-arm64.exe  （仅含运行库版）
   licenses/
   plugins/<name>/bin + lib + share + licenses  （full 额外插件）
   unins*.exe + 卸载记录
@@ -109,11 +119,15 @@
 | Job | 流程 |
 | --- | --- |
 | `build-x64` | 使用固定 LLVM `22.1.8` 构建 `base` 并复用 SDK 构建 `full` 全部插件；验证温州话、额外码表和注音提交及注音模型保存/重载，上传两套运行树与共享测试/Settings artifact |
+| `build-arm64` | 在 Windows 11 ARM 上构建 ARM64 Core、TSF、Settings 和 helper，验证 ARM64 PE 并上传原生运行树/测试探针 |
 | `test-x64` | 运行脚本与模拟注册检查回归、图标校验、默认 CTest、拼音/TSF/Settings/五笔/输入法列表、引擎翻译迁移与词库验证 |
 | `test-x86` | 使用固定 LLVM `22.1.8` 构建/测试 x86 TSF，运行 x86 探针、双架构并发 Pipe 与部署审计 |
-| `package-installer-x64` | `base`/`full` × 含/不含运行库四路矩阵；核对运行库 SHA256，运行 `test-build-installer.ps1`、`test-installer-wizard.ps1`、`test-installer-restart.ps1`，生成安装包并核对 `full`/`base` 插件清单 |
+| `test-arm64` | 仅验证 ARM64 Core + ARM64 TSF：Pinyin/TSF IPC、输入法持久化、翻译与词库；不测试 ARM64/x64 混合架构组合 |
+| `package-installer-x64` | `base`/`full` × 含/不含运行库四路矩阵；核对运行库 SHA256，运行 installer packaging/wizard/restart tests |
+| `package-installer-arm64` | `base` × 含/不含 ARM64 运行库两路矩阵；构建 x86 Inno Setup 引导程序，校验 ARM64-only payload 和 ARM64 运行库 |
 | `installer-smoke-x64` | 对 `base`/`full` 不含运行库包执行 `/VERYSILENT /MACHINEONLY=1` 静默安装、双架构 COM/profile/现代 category 双向检查与静默卸载清理 |
-| `release` | 全部上游 job 通过且在 `master`（提交信息不含 `!release`）时发布四个 EXE 与对应 SHA256（共 8 个附件）至 `latest` 预发布 |
+| `installer-smoke-arm64` | 在原生 Windows 11 ARM 上运行 x86 Setup 引导程序，验证 ARM64 PE、TSF 注册、运行库安装和卸载 |
+| `release` | 全部上游 job 通过且在 `master`（提交信息不含 `!release`）时发布四个 x64 EXE 与两个 ARM64 base EXE 及对应 SHA256 至 `latest` 预发布 |
 
 当前 CI 不执行代码签名。CI/Nightly 安装包均声明 `UIELEMENTENABLED` 和 `IMMERSIVESUPPORT`，smoke 缺失现代声明会阻止发布。
 
