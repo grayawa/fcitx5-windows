@@ -66,7 +66,7 @@ if ($isArm64) {
         Assert-PeMachine (Join-Path $Prefix $relative) arm64
     }
     foreach ($image in Get-ChildItem -LiteralPath $Prefix -Recurse -File |
-            Where-Object Extension -in '.exe', '.dll') {
+            Where-Object { $_.Extension -in @('.exe', '.dll') }) {
         Assert-PeMachine $image.FullName arm64
     }
     foreach ($unsupported in @('tsf/fcitx5-x86_64.dll', 'tsf/x86/fcitx5-x86.dll')) {
