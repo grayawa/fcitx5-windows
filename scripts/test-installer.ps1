@@ -173,7 +173,7 @@ try {
             Assert-PeMachine (Join-Path $InstallRoot $relative) arm64
         }
         foreach ($image in Get-ChildItem -LiteralPath $InstallRoot -Recurse -File |
-                Where-Object { $_.Extension -in '.exe', '.dll' -and $_.Name -notlike 'unins*.exe' }) {
+                Where-Object { ($_.Extension -in @('.exe', '.dll')) -and $_.Name -notlike 'unins*.exe' }) {
             Assert-PeMachine $image.FullName arm64
         }
     } else {
