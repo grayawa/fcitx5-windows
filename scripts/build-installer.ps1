@@ -6,6 +6,7 @@ param(
     [string]$PackageVersion = '0.1.0.0',
     [string]$PackageName = '',
     [string]$IsccPath = '',
+    [ValidateSet('x64', 'arm64')][string]$Architecture = 'x64',
     [switch]$SkipRuntimes,
     [switch]$RebootUpgrade = $true
 )
@@ -24,9 +25,12 @@ foreach ($path in @($Prefix, $Dependencies, $Output)) {
         throw "Installer paths must be inside the repository: $path"
     }
 }
-foreach ($file in @('bin/Fcitx5.exe', 'tsf/fcitx5-x86_64.dll', 'tsf/x86/fcitx5-x86.dll',
+foreach ($file in @(
+        'bin/Fcitx5.exe',
+        $(if ($Architecture -eq 'arm64') { 'tsf/fcitx5-arm64.dll' } else { 'tsf/fcitx5-x86_64.dll' }),
+        $(if ($Architecture -eq 'x64') { 'tsf/x86/fcitx5-x86.dll' }),
         'setup/Fcitx5SetupHelper.exe', 'setup/Fcitx5Upgrade.exe', 'settings/Fcitx5Settings.exe')) {
-    if (!(Test-Path -LiteralPath (Join-Path $Prefix $file) -PathType Leaf)) {
+    if ($file -and !(Test-Path -LiteralPath (Join-Path $Prefix $file) -PathType Leaf)) {
         throw "Missing staged installer file: $file"
     }
 }
@@ -37,17 +41,44 @@ if ($PackageVersion -notmatch '^\d{1,5}\.\d{1,5}\.\d{1,5}\.\d{1,5}$' -or
 if ($PackageName -and $PackageName -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$') {
     throw 'PackageName must be a simple ASCII package basename without directory components.'
 }
+$architecture = $Architecture.ToLowerInvariant()
+$isArm64 = $architecture -eq 'arm64'
+$dependencyNames = if ($isArm64) {
+    @('vc_redist.arm64.exe', 'WindowsAppRuntimeInstall-arm64.exe')
+} else {
+    @('vc_redist.x64.exe', 'WindowsAppRuntimeInstall-x64.exe')
+}
 if (!$SkipRuntimes) {
-    foreach ($file in @('vc_redist.x64.exe', 'WindowsAppRuntimeInstall-x64.exe')) {
+    foreach ($file in $dependencyNames) {
         if (!(Test-Path -LiteralPath (Join-Path $Dependencies $file) -PathType Leaf)) {
             throw "Missing installer dependency: $file"
         }
     }
 }
-if (!$PSCmdlet.ShouldProcess($Output, 'Build Fcitx5 Inno Setup installer')) { return }
+if (!$PSCmdlet.ShouldProcess($Output, "Build Fcitx5 $architecture Inno Setup installer")) { return }
 . "$root/win32/scripts/pe-machine.ps1"
-Assert-PeMachine "$Prefix/tsf/fcitx5-x86_64.dll" x64
-Assert-PeMachine "$Prefix/tsf/x86/fcitx5-x86.dll" x86
+if ($isArm64) {
+    foreach ($relative in @('bin/Fcitx5.exe', 'tsf/fcitx5-arm64.dll',
+            'setup/Fcitx5SetupHelper.exe', 'setup/Fcitx5Upgrade.exe', 'settings/Fcitx5Settings.exe')) {
+        Assert-PeMachine (Join-Path $Prefix $relative) arm64
+    }
+    foreach ($image in Get-ChildItem -LiteralPath $Prefix -Recurse -File |
+            Where-Object Extension -in '.exe', '.dll') {
+        Assert-PeMachine $image.FullName arm64
+    }
+    foreach ($unsupported in @('tsf/fcitx5-x86_64.dll', 'tsf/x86/fcitx5-x86.dll')) {
+        if (Test-Path -LiteralPath (Join-Path $Prefix $unsupported)) {
+            throw "ARM64 installer must not contain an unsupported architecture payload: $unsupported"
+        }
+    }
+} else {
+    Assert-PeMachine "$Prefix/bin/Fcitx5.exe" x64
+    Assert-PeMachine "$Prefix/tsf/fcitx5-x86_64.dll" x64
+    Assert-PeMachine "$Prefix/tsf/x86/fcitx5-x86.dll" x86
+    Assert-PeMachine "$Prefix/setup/Fcitx5SetupHelper.exe" x64
+    Assert-PeMachine "$Prefix/setup/Fcitx5Upgrade.exe" x64
+    Assert-PeMachine "$Prefix/settings/Fcitx5Settings.exe" x64
+}
 $iscc = if ($IsccPath) { Get-Command $IsccPath -ErrorAction Stop } else { Get-Command ISCC.exe -ErrorAction SilentlyContinue }
 if (!$iscc) {
     $iscc = Get-ChildItem 'C:/Program Files (x86)/Inno Setup 7',
@@ -62,7 +93,11 @@ if ($LASTEXITCODE -ne 0 -or $compilerVersion -notmatch '^7\.\d+\.\d+(?:\..*)?(?:
 }
 Write-Verbose "Using Inno Setup $compilerVersion at $isccPath"
 if (!$PackageName) {
-    $PackageName = if ($SkipRuntimes) { "Fcitx5-$PackageVersion-x64-no-runtime-setup" } else { "Fcitx5-$PackageVersion-x64-setup" }
+    $PackageName = if ($SkipRuntimes) {
+        "Fcitx5-$PackageVersion-$architecture-no-runtime-setup"
+    } else {
+        "Fcitx5-$PackageVersion-$architecture-setup"
+    }
 }
 $bundleRuntimes = if ($SkipRuntimes) { 0 } else { 1 }
 $manifest = Join-Path $Output "$PackageName.manifest.txt"
@@ -107,7 +142,7 @@ $records = @($runtime | Sort-Object FullName | ForEach-Object {
 })
 $dependencyRecords = @()
 if (!$SkipRuntimes) {
-    $dependencyRecords = @(foreach ($name in @('vc_redist.x64.exe', 'WindowsAppRuntimeInstall-x64.exe')) {
+    $dependencyRecords = @(foreach ($name in $dependencyNames) {
         $file = Get-Item -LiteralPath (Join-Path $Dependencies $name)
         [ordered]@{ path = $name; size = $file.Length; sha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
     })
@@ -115,7 +150,7 @@ if (!$SkipRuntimes) {
 $protocol = Select-String -LiteralPath "$root/win32/ipc/protocol.h" -Pattern 'constexpr uint16_t kVersion = (\d+);'
 if (!$protocol) { throw 'Cannot determine the IPC protocol version.' }
 $document = [ordered]@{
-    schemaVersion = 1; architecture = 'x64'; protocolVersion = [int]$protocol.Matches[0].Groups[1].Value
+    schemaVersion = 1; architecture = $architecture; protocolVersion = [int]$protocol.Matches[0].Groups[1].Value
     version = $PackageVersion; package = $PackageName; files = $records; dependencies = $dependencyRecords
 }
 $utf8 = New-Object System.Text.UTF8Encoding($false)
@@ -131,13 +166,14 @@ $entries = @($records | ForEach-Object {
 @(
     "version=$PackageVersion"
     "package=$PackageName"
+    "architecture=$architecture"
     "bundle-runtimes=$bundleRuntimes"
     "commit=$((& git -C $root rev-parse HEAD).Trim())"
     "prefix=$Prefix"
     "inno=$compilerVersion"
     "reboot-upgrade=$([int]$RebootUpgrade.IsPresent)"
 ) | Set-Content -LiteralPath $manifest -Encoding ascii
-& $isccPath "/DPrefix=$Prefix" "/DDependencies=$Dependencies" "/DBundleRuntimes=$bundleRuntimes" "/DRuntimeManifest=$runtimeManifest" "/DRuntimeFiles=$runtimeFiles" "/DRebootUpgrade=$([int]$RebootUpgrade.IsPresent)" "/DOutputDirectory=$Output" "/DPackageVersion=$PackageVersion" "/DPackageName=$PackageName" (Join-Path $root 'installer/fcitx5.iss')
+& $isccPath "/DPrefix=$Prefix" "/DDependencies=$Dependencies" "/DBundleRuntimes=$bundleRuntimes" "/DIsArm64=$([int]$isArm64)" "/DRuntimeManifest=$runtimeManifest" "/DRuntimeFiles=$runtimeFiles" "/DRebootUpgrade=$([int]$RebootUpgrade.IsPresent)" "/DOutputDirectory=$Output" "/DPackageVersion=$PackageVersion" "/DPackageName=$PackageName" (Join-Path $root 'installer/fcitx5.iss')
 if ($LASTEXITCODE -ne 0) { throw "ISCC failed ($LASTEXITCODE)." }
 $setup = Join-Path $Output "$PackageName.exe"
 if (!(Test-Path -LiteralPath $setup -PathType Leaf)) { throw "Installer was not produced: $setup" }
