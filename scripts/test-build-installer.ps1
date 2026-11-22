@@ -168,7 +168,54 @@ try {
         }
         $testState.CompilerExitCode = 9
         Assert-Failure { & $entry -Prefix $prefix -Dependencies $dependencies -Output $output -SkipRuntimes } 'ISCC failed (9)'
-        Write-Output 'PASS: explicit compiler path, Inno Setup 6 rejection, actual compiler version, runtime variants, reboot-upgrade defaults and overrides, missing dependencies, distinct manifests/checksums, custom names, compiler failure, arbitrary-CWD/space/quote paths and WhatIf.'
+
+        # Exercise the native ARM64 payload path independently of the x64 dual-TSF package.
+        $testState.CompilerExitCode = 0
+        $arm64Prefix = Join-Path $temporary 'stage-arm64'
+        $arm64Dependencies = Join-Path $temporary 'dependencies-arm64'
+        $arm64Output = Join-Path $temporary 'output-arm64'
+        foreach ($relative in @('bin/Fcitx5.exe', 'tsf/fcitx5-arm64.dll',
+                'setup/Fcitx5SetupHelper.exe', 'setup/Fcitx5Upgrade.exe',
+                'settings/Fcitx5Settings.exe')) {
+            $file = Join-Path $arm64Prefix $relative
+            New-Item -ItemType Directory -Force (Split-Path $file) | Out-Null
+            $bytes = New-Object byte[] 88
+            $bytes[0] = 0x4d; $bytes[1] = 0x5a; $bytes[0x3c] = 64
+            $bytes[64] = 0x50; $bytes[65] = 0x45
+            [BitConverter]::GetBytes([uint16]0xaa64).CopyTo($bytes, 68)
+            [IO.File]::WriteAllBytes($file, $bytes)
+        }
+        $beforeArm64Calls = $testState.CompilerCalls.Count
+        & $entry -Architecture arm64 -Prefix $arm64Prefix -Output $arm64Output -PackageVersion '0.1.3.0' -SkipRuntimes | Out-Null
+        $arm64Lite = 'Fcitx5-0.1.3.0-arm64-no-runtime-setup'
+        $arm64Manifest = Get-Content -Raw -LiteralPath "$arm64Output/metadata/$arm64Lite.runtime.json" | ConvertFrom-Json
+        if ($arm64Manifest.architecture -ne 'arm64' -or
+            @($arm64Manifest.files | Where-Object path -eq 'tsf/fcitx5-arm64.dll').Count -ne 1 -or
+            @($arm64Manifest.files | Where-Object path -match 'fcitx5-x86_64|tsf/x86/').Count -ne 0 -or
+            $arm64Manifest.dependencies.Count -ne 0) {
+            throw 'ARM64 no-runtime package contains an incorrect architecture or dependency manifest.'
+        }
+        if ($testState.CompilerCalls.Count -ne ($beforeArm64Calls + 1) -or
+            $testState.CompilerCalls[-1] -notcontains '/DIsArm64=1') {
+            throw 'ARM64 package did not select the ARM64 Inno Setup configuration.'
+        }
+        foreach ($record in $arm64Manifest.files) {
+            if ((Get-FileHash -LiteralPath (Join-Path $arm64Prefix $record.path) -Algorithm SHA256).Hash.ToLowerInvariant() -ne $record.sha256) {
+                throw "Incorrect ARM64 runtime file digest: $($record.path)"
+            }
+        }
+
+        New-Item -ItemType Directory -Force $arm64Dependencies | Out-Null
+        Set-Content -LiteralPath "$arm64Dependencies/vc_redist.arm64.exe" -Value 'fixture' -Encoding ascii
+        Set-Content -LiteralPath "$arm64Dependencies/WindowsAppRuntimeInstall-arm64.exe" -Value 'fixture' -Encoding ascii
+        & $entry -Architecture arm64 -Prefix $arm64Prefix -Dependencies $arm64Dependencies -Output $arm64Output -PackageVersion '0.1.3.1' | Out-Null
+        $arm64Full = Get-Content -Raw -LiteralPath "$arm64Output/metadata/Fcitx5-0.1.3.1-arm64-setup.runtime.json" | ConvertFrom-Json
+        if ($arm64Full.architecture -ne 'arm64' -or
+            @($arm64Full.dependencies | Where-Object path -eq 'vc_redist.arm64.exe').Count -ne 1 -or
+            @($arm64Full.dependencies | Where-Object path -eq 'WindowsAppRuntimeInstall-arm64.exe').Count -ne 1) {
+            throw 'ARM64 bundled-runtime package has incorrect architecture-specific dependencies.'
+        }
+        Write-Output 'PASS: x64 and ARM64 package layouts, native PE validation, architecture-specific runtime dependencies, manifests, checksums, compiler selection and WhatIf.'
     } finally { Pop-Location }
 } finally {
     $resolved = [IO.Path]::GetFullPath($temporary)
