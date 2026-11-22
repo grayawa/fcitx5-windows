@@ -1,4 +1,5 @@
 #include "../dll/register.h"
+#include "../setup/architecture.h"
 #include "../dll/util.h"
 #include "../ipc/service.h"
 #include "../setup/log.h"
@@ -81,7 +82,7 @@ HRESULT WINAPI mockRegister() {
     return registerResult;
 }
 HMODULE WINAPI mockLoadLibraryExW(LPCWSTR path, HANDLE, DWORD) {
-    assert(fs::path(path) == root / "tsf" / "fcitx5-x86_64.dll");
+    assert(fs::path(path) == root / fs::path(fcitx::setup::kNativeTsfDllWide));
     return reinterpret_cast<HMODULE>(1);
 }
 FARPROC WINAPI mockGetProcAddress(HMODULE, LPCSTR name) {
@@ -101,7 +102,8 @@ DWORD WINAPI mockRmRegisterResources(DWORD, UINT count, LPCWSTR files[], UINT,
     const bool dual = fs::exists(root / "tsf/x86/fcitx5-x86.dll");
     assert(count == (dual ? 2u : 1u));
     for (UINT index = 0; index < count; ++index)
-        assert(fs::path(files[index]) == root / "tsf/fcitx5-x86_64.dll" ||
+        assert(fs::path(files[index]) ==
+                   root / fs::path(fcitx::setup::kNativeTsfDllWide) ||
                fs::path(files[index]) == root / "tsf/x86/fcitx5-x86.dll");
     return ERROR_SUCCESS;
 }
@@ -235,7 +237,8 @@ int main() {
            (L"fcitx5-uninstall-test-" + std::to_wstring(GetCurrentProcessId()));
     fs::create_directories(root / "setup");
     fs::create_directories(root / "tsf");
-    std::ofstream(root / "tsf" / "fcitx5-x86_64.dll") << "fixture";
+    std::ofstream(root / fs::path(fcitx::setup::kNativeTsfDllWide))
+        << "fixture";
     const auto run = [](bool elevated, bool silent, DWORD result, bool inUse) {
         admin = elevated;
         locked = inUse;
