@@ -369,13 +369,21 @@ jobs:
       - name: Verify native ARM64 SVG tooling
         shell: pwsh
         run: |
-          $magick = Get-Command magick.exe -CommandType Application -ErrorAction Stop
-          $rsvg = Get-Command rsvg-convert.exe -CommandType Application -ErrorAction Stop
-          Write-Host "ImageMagick: $($magick.Source)"
-          Write-Host "librsvg: $($rsvg.Source)"
+          $magick = Join-Path $env:MSYS2_ROOT 'clangarm64/bin/magick.exe'
+          $rsvg = Join-Path $env:MSYS2_ROOT 'clangarm64/bin/rsvg-convert.exe'
+          foreach ($tool in @($magick, $rsvg)) {
+            if (!(Test-Path -LiteralPath $tool -PathType Leaf)) {
+              throw "Required native ARM64 SVG tool is missing: $tool"
+            }
+          }
+          . ./win32/scripts/pe-machine.ps1
+          Assert-PeMachine $magick arm64
+          Assert-PeMachine $rsvg arm64
+          Write-Host "ImageMagick: $magick"
+          Write-Host "librsvg: $rsvg"
           $icon = Join-Path $env:RUNNER_TEMP 'fcitx5-penguin-arm64.ico'
-          & $magick.Source -background none "$PWD/win32/assets/penguin.svg" $icon
-          if ($LASTEXITCODE -ne 0 -or !(Test-Path $icon)) {
+          & $magick -background none "$PWD/win32/assets/penguin.svg" $icon
+          if ($LASTEXITCODE -ne 0 -or !(Test-Path -LiteralPath $icon -PathType Leaf)) {
             throw 'ImageMagick could not convert the TSF SVG icon using the native ARM64 librsvg delegate.'
           }
           Remove-Item -LiteralPath $icon -Force
