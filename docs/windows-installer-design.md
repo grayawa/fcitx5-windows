@@ -4,7 +4,7 @@
 
 ## 交付与支持范围
 
-x64 包使用 Inno Setup 7 生成 x64 EXE，安装到 `<ProgramFiles>/Fcitx5`，内置共享同一 x64 Core 的 x64/x86 TSF。ARM64 包使用 Inno Setup 生成 x86 Setup 引导程序（在 Windows on Arm 上经 x86 模拟运行），但限制仅在 ARM64 Windows 上安装，并启用 ARM64 64 位安装模式；实际 Core、TSF、Settings、helper 和运行库均为 ARM64。MSI 和原生 ARM64 Inno Setup 引导程序尚未提供。
+x64 包使用 Inno Setup 7 生成 x64 EXE，安装到 `<ProgramFiles>/Fcitx5`，内置共享同一 x64 Core 的 x64/x86 TSF。ARM64 包使用 Inno Setup 生成 x86 Setup 引导程序（在 Windows on Arm 上经 x86 模拟运行），但限制仅在 Windows 11 ARM64（build 22000+）上安装，并启用 ARM64 64 位安装模式；实际 Core、TSF、Settings、helper 和运行库均为 ARM64。MSI 和原生 ARM64 Inno Setup 引导程序尚未提供。
 
 | CI 包名 | 运行库策略 |
 | --- | --- |
@@ -19,7 +19,7 @@ x64 包使用 Inno Setup 7 生成 x64 EXE，安装到 `<ProgramFiles>/Fcitx5`，
 - `full`：包含 `plugins/` 下全部插件（`fcitx5-chinese-addons`、`fcitx5-rime`、`fcitx5-table-extra`、`fcitx5-wenzhounese`、`fcitx5-zhuyin`），额外插件部署到 `plugins/<name>` 并纳入安装/升级所有权清单，见 [Windows 插件](windows-plugins.md)。
 - Settings 采用 framework-dependent Windows App SDK 1.8。x64 Settings 要求当前用户安装 x64 Framework/DDLM >= `8000.994.2142.0` 与 x64 VC++ 运行库；ARM64 Settings 要求对应 ARM64 Framework/DDLM 与 ARM64 VC++ 运行库。不含运行库包在用户阶段仍会执行 `Fcitx5Settings.exe --runtime-check`。
 
-x64 安装器配置为 `SetupArchitecture=x64`、`ArchitecturesAllowed=x64os`、x64 安装模式；ARM64 安装器配置为 `SetupArchitecture=x86`、`ArchitecturesAllowed=arm64`、`ArchitecturesInstallIn64BitMode=arm64`。两者均使用 `MinVersion=10.0.17763`、`PrivilegesRequired=admin` 与固定 AppId。ARM64 Setup 引导程序通过 WoA x86 模拟运行，实际注册 helper 是 ARM64 原生程序；它只注册 ARM64 TSF，不加载或注册 x64/x86 TSF。x64 TSF 由原生 helper 注册，x86 TSF 通过 `SysWOW64/regsvr32.exe` 注册，两者共享 CLSID/profile 并使用独立 registry view（参见 [TSF 64 位平台说明](https://learn.microsoft.com/en-us/windows/win32/tsf/64-bit-platform-considerations)）。
+x64 安装器配置为 `SetupArchitecture=x64`、`ArchitecturesAllowed=x64os`、x64 安装模式和 `MinVersion=10.0.17763`；ARM64 安装器配置为 `SetupArchitecture=x86`、`ArchitecturesAllowed=arm64`、`ArchitecturesInstallIn64BitMode=arm64` 和 `MinVersion=10.0.22000`（Windows 11 ARM64）。两者均使用 `PrivilegesRequired=admin` 与固定 AppId。ARM64 Setup 引导程序通过 WoA x86 模拟运行，实际注册 helper 是 ARM64 原生程序；它只注册 ARM64 TSF，不加载或注册 x64/x86 TSF。x64 TSF 由原生 helper 注册，x86 TSF 通过 `SysWOW64/regsvr32.exe` 注册，两者共享 CLSID/profile 并使用独立 registry view（参见 [TSF 64 位平台说明](https://learn.microsoft.com/en-us/windows/win32/tsf/64-bit-platform-considerations)）。
 
 ## 实现入口
 
@@ -142,6 +142,7 @@ x64 安装器配置为 `SetupArchitecture=x64`、`ArchitecturesAllowed=x64os`、
 | 场景 | 待验证结果 |
 | --- | --- |
 | Windows 10 1809 / 22H2 与干净 Windows 11 x64 | 含运行库的 `base`/`full` 包完成依赖安装、双架构注册、用户启用；Settings 正常打开，真实应用提交中文 |
+| Windows 11 ARM64 build 22000+ | ARM64 base 含运行库包完成 ARM64 依赖安装、原生 TSF 注册、Settings 启动和卸载；不测试混合架构组合 |
 | 不含运行库包 | 已装依赖时成功；缺失依赖时报错并补偿回滚 |
 | 权限分支（管理员双击、标准用户经另一管理员 UAC、已提升终端、静默/SYSTEM） | 原始用户获得配置且 Core 保持普通权限；退出码准确区分失败、待初始化与 `3010` |
 | 非中文系统、每应用输入模式、已有应用窗口 | 记录默认/激活与重开限制 |
