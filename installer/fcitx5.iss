@@ -11,6 +11,7 @@
   #define SetupArchitecture "x86"
   #define AllowedArchitectures "arm64"
   #define InstallIn64BitMode "arm64"
+  #define MinimumWindowsVersion "10.0.22000"
   #define UninstallIcon "tsf\fcitx5-arm64.dll"
   #define VCRedistFile "vc_redist.arm64.exe"
   #define WindowsAppRuntimeFile "WindowsAppRuntimeInstall-arm64.exe"
@@ -18,6 +19,7 @@
   #define SetupArchitecture "x64"
   #define AllowedArchitectures "x64os"
   #define InstallIn64BitMode "x64os"
+  #define MinimumWindowsVersion "10.0.17763"
   #define UninstallIcon "tsf\fcitx5-x86_64.dll"
   #define VCRedistFile "vc_redist.x64.exe"
   #define WindowsAppRuntimeFile "WindowsAppRuntimeInstall-x64.exe"
@@ -61,7 +63,7 @@ DefaultGroupName=Fcitx5
 SetupArchitecture={#SetupArchitecture}
 ArchitecturesAllowed={#AllowedArchitectures}
 ArchitecturesInstallIn64BitMode={#InstallIn64BitMode}
-MinVersion=10.0.17763
+MinVersion={#MinimumWindowsVersion}
 PrivilegesRequired=admin
 CloseApplications=no
 RestartApplications=no
