@@ -89,9 +89,10 @@ available in two variants:
   `8000.994.2142.0` to be installed beforehand for the current user.
 
 The ARM64 package's Inno Setup bootstrapper is an x86 executable that runs under
-Windows on Arm's x86 emulation; the installed Core, TSF, Settings, helpers and
-runtime dependencies are native ARM64. It registers only ARM64 TSF with the
-ARM64 Core. The x64 packages retain their existing x64 Core with x64/x86 TSF
+Windows on Arm's x86 emulation. The installed Core, TSF, Settings, helpers and
+runtime payloads are ARM64. Microsoft prerequisite installers are signed
+bootstrappers (the VC++ ARM64 redistributable itself uses an x86 bootstrapper).
+It registers only ARM64 TSF with the ARM64 Core. The x64 packages retain their existing x64 Core with x64/x86 TSF
 frontends. Optional login startup is unchecked by default and respects manual
 service stops. See [installer details](docs/windows-installer-design.md).
 
