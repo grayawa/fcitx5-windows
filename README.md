@@ -79,7 +79,8 @@ Each edition comes in two runtime variants:
   x64 Windows App SDK 1.8 Framework/DDLM >= `8000.994.2142.0` to be installed
   beforehand for the current user.
 
-The ARM64 base edition is available in two variants:
+The ARM64 base edition targets Windows 11 ARM64 build 22000 or later and is
+available in two variants:
 
 - `Fcitx5-<run>-base-arm64-setup.exe`: bundles ARM64 Visual C++ and Windows App
   Runtime installers.
