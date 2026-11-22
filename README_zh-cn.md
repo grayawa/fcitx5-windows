@@ -48,7 +48,7 @@ ARM64 base 安装包也提供两种运行库组合：
 - `Fcitx5-<run>-base-arm64-setup.exe`：附带 ARM64 Visual C++ 和 Windows App Runtime 安装程序。
 - `Fcitx5-<run>-base-arm64-no-runtime-setup.exe`：需预先为当前用户安装 ARM64 Visual C++ 运行库和 ARM64 Windows App SDK 1.8 Framework/DDLM >= `8000.994.2142.0`。
 
-ARM64 包使用可在 Windows on Arm x86 模拟环境运行的 x86 Inno Setup 引导程序，但安装的 Core、TSF、Settings、helper 和运行库均为原生 ARM64，只支持 ARM64 Core + ARM64 TSF。x64 包仍使用 x64 Core 和 x64/x86 TSF。安装器将运行树部署到 Program Files，配置安装发起用户的输入法并启动 Core。可选登录启动默认不勾选，且遵守手动关闭服务状态。详见[安装说明](docs/windows-installer-design.md)。
+ARM64 包面向 Windows 11 ARM64 build 22000 及以上版本，使用可在 Windows on Arm x86 模拟环境运行的 x86 Inno Setup 引导程序，但安装的 Core、TSF、Settings、helper 和运行库均为原生 ARM64，只支持 ARM64 Core + ARM64 TSF。x64 包仍使用 x64 Core 和 x64/x86 TSF。安装器将运行树部署到 Program Files，配置安装发起用户的输入法并启动 Core。可选登录启动默认不勾选，且遵守手动关闭服务状态。详见[安装说明](docs/windows-installer-design.md)。
 
 升级时完整暂存新版并在等待重启期间保持当前版本可用，暂存成功返回 `3010`，重启 Windows 后完成提交。状态查询、取消与恢复见[重启升级说明](docs/windows-reboot-upgrade-design.md)。
 
