@@ -1,6 +1,7 @@
 #include "../dll/register.h"
 #include "../dll/util.h"
 #include "../ipc/service.h"
+#include "architecture.h"
 #include "log.h"
 #include "startup.h"
 #include "upgrade.h"
@@ -19,11 +20,6 @@ namespace upgrade = fcitx::setup::upgrade;
 constexpr wchar_t kClsidKey[] = L"SOFTWARE\\Classes\\CLSID\\{FC3869BA-51E3-"
                                 L"4078-8EE2-5FE49493A1F4}\\InprocServer32";
 
-#if defined(_M_ARM64)
-constexpr wchar_t kNativeTsfDll[] = L"tsf/fcitx5-arm64.dll";
-#else
-constexpr wchar_t kNativeTsfDll[] = L"tsf/fcitx5-x86_64.dll";
-#endif
 
 bool administrator() {
     SID_IDENTIFIER_AUTHORITY authority = SECURITY_NT_AUTHORITY;
@@ -55,7 +51,7 @@ std::wstring registryString(HKEY root, const wchar_t *key, const wchar_t *name,
 
 bool ownsRegistration(const fs::path &root) {
     for (const auto &[view, relative] :
-         {std::pair{RRF_SUBKEY_WOW6464KEY, kNativeTsfDll},
+         {std::pair{RRF_SUBKEY_WOW6464KEY, fcitx::setup::kNativeTsfDllWide},
           std::pair{RRF_SUBKEY_WOW6432KEY, L"tsf/x86/fcitx5-x86.dll"}}) {
         const auto path =
             registryString(HKEY_LOCAL_MACHINE, kClsidKey, nullptr, view);
@@ -258,7 +254,7 @@ DWORD registration(const fs::path &root, bool uninstall) {
             return code;
         x86Registrar = fs::path(directory) / L"regsvr32.exe";
     }
-    const auto dll = root / kNativeTsfDll;
+    const auto dll = root / fcitx::setup::kNativeTsfDllWide;
     if (uninstall && !fs::exists(dll)) {
         const auto profiles = fcitx::UnregisterCategoriesAndProfiles();
         const auto server = fcitx::UnregisterServer();
@@ -302,7 +298,7 @@ DWORD configure(const fs::path &root) {
                              L"--runtime-check");
     fcitx::setup::logStep("configure-user Settings runtime-check", result);
     if (result) {
-        result = runProcess(root / "setup" / "WindowsAppRuntimeInstall-x64.exe",
+        result = runProcess(root / "setup" / fcitx::setup::kWindowsAppRuntimeFileWide,
                             L"--quiet");
         fcitx::setup::logStep("configure-user Windows App Runtime install",
                               result);
