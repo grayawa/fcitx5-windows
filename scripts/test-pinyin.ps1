@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param([string]$Prefix = '', [string]$TsfBuild = '',
     [ValidateSet('x64', 'x86', 'arm64')][string]$Architecture = 'x64',
-    [switch]$SkipCTest)
+    [string]$PeerTsfBuild = '', [switch]$SkipCTest)
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -38,6 +38,12 @@ try {
         if ($ready) { $connected = $true; break }
     }
     if (!$connected) { throw 'Pinyin IPC integration failed.' }
+    if ($PeerTsfBuild) {
+        if ($Architecture -ne 'x86') {
+            throw 'The x86/x64 peer probe is only supported by the existing x86 TSF test job.'
+        }
+        & "$PSScriptRoot/test-cross-arch.ps1" -TsfBuild $TsfBuild -PeerTsfBuild $PeerTsfBuild
+    }
     & $probe
     if ($LASTEXITCODE -ne 0) { throw 'Pinyin IPC regression failed.' }
     & $settingsProbe
