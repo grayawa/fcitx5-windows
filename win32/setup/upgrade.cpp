@@ -1,4 +1,5 @@
 #include "upgrade.h"
+#include "architecture.h"
 #include "../ipc/installation.h"
 #include "log.h"
 #include <algorithm>
@@ -56,8 +57,8 @@ std::vector<File> files(const Tree &array, bool dependency) {
                    node.get<std::string>("sha256")};
         const auto path = relativePath(value.path);
         if (!key.empty() || (!dependency && !runtimePath(path)) ||
-            (dependency && value.path != "vc_redist.x64.exe" &&
-             value.path != "WindowsAppRuntimeInstall-x64.exe") ||
+            (dependency && value.path != kVCRedistFile &&
+             value.path != kWindowsAppRuntimeFile) ||
             value.digest.size() != 64 ||
             !std::all_of(value.digest.begin(), value.digest.end(),
                          [](char c) {
@@ -214,7 +215,7 @@ namespace {
 Manifest parseManifestTree(const Tree &tree) try {
     Manifest result;
     if (tree.get<unsigned>("schemaVersion") != 1 ||
-        tree.get<std::string>("architecture") != "x64")
+        tree.get<std::string>("architecture") != kNativeArchitecture)
         fail(ERROR_REVISION_MISMATCH);
     const auto protocol = tree.get<unsigned>("protocolVersion");
     if (!protocol || protocol > UINT16_MAX)
@@ -228,7 +229,7 @@ Manifest parseManifestTree(const Tree &tree) try {
         result.package.size() > 128 || result.files.empty())
         fail(ERROR_INVALID_DATA);
     for (const auto required :
-         {"bin/Fcitx5.exe", "tsf/fcitx5-x86_64.dll",
+         {"bin/Fcitx5.exe", kNativeTsfDll,
           "setup/Fcitx5SetupHelper.exe", "setup/managed-install",
           "settings/Fcitx5Settings.exe"}) {
         if (std::none_of(
@@ -367,7 +368,7 @@ DWORD Engine::begin(const fs::path &manifestPath,
     plan.put("ownerCreation", processCreation(owner_));
     Tree binaries;
     for (auto path :
-         {"bin/Fcitx5.exe", "tsf/fcitx5-x86_64.dll",
+         {"bin/Fcitx5.exe", kNativeTsfDll,
           "setup/Fcitx5SetupHelper.exe", "settings/Fcitx5Settings.exe"}) {
         Tree file;
         file.put("path", path);
