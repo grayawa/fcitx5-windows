@@ -25,12 +25,17 @@ foreach ($path in @($Prefix, $Dependencies, $Output)) {
         throw "Installer paths must be inside the repository: $path"
     }
 }
-foreach ($file in @(
-        'bin/Fcitx5.exe',
-        $(if ($Architecture -eq 'arm64') { 'tsf/fcitx5-arm64.dll' } else { 'tsf/fcitx5-x86_64.dll' }),
-        $(if ($Architecture -eq 'x64') { 'tsf/x86/fcitx5-x86.dll' }),
-        'setup/Fcitx5SetupHelper.exe', 'setup/Fcitx5Upgrade.exe', 'settings/Fcitx5Settings.exe')) {
-    if ($file -and !(Test-Path -LiteralPath (Join-Path $Prefix $file) -PathType Leaf)) {
+$architecture = $Architecture.ToLowerInvariant()
+$isArm64 = $architecture -eq 'arm64'
+$requiredFiles = @('bin/Fcitx5.exe')
+if ($isArm64) {
+    $requiredFiles += 'tsf/fcitx5-arm64.dll'
+} else {
+    $requiredFiles += @('tsf/fcitx5-x86_64.dll', 'tsf/x86/fcitx5-x86.dll')
+}
+$requiredFiles += @('setup/Fcitx5SetupHelper.exe', 'setup/Fcitx5Upgrade.exe', 'settings/Fcitx5Settings.exe')
+foreach ($file in $requiredFiles) {
+    if (!(Test-Path -LiteralPath (Join-Path $Prefix $file) -PathType Leaf)) {
         throw "Missing staged installer file: $file"
     }
 }
@@ -41,8 +46,6 @@ if ($PackageVersion -notmatch '^\d{1,5}\.\d{1,5}\.\d{1,5}\.\d{1,5}$' -or
 if ($PackageName -and $PackageName -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$') {
     throw 'PackageName must be a simple ASCII package basename without directory components.'
 }
-$architecture = $Architecture.ToLowerInvariant()
-$isArm64 = $architecture -eq 'arm64'
 $dependencyNames = if ($isArm64) {
     @('vc_redist.arm64.exe', 'WindowsAppRuntimeInstall-arm64.exe')
 } else {
