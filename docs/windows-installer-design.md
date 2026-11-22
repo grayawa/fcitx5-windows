@@ -4,7 +4,7 @@
 
 ## 交付与支持范围
 
-x64 包使用 Inno Setup 7 生成 x64 EXE，安装到 `<ProgramFiles>/Fcitx5`，内置共享同一 x64 Core 的 x64/x86 TSF。ARM64 包使用 Inno Setup 生成 x86 Setup 引导程序（在 Windows on Arm 上经 x86 模拟运行），但限制仅在 Windows 11 ARM64（build 22000+）上安装，并启用 ARM64 64 位安装模式；实际 Core、TSF、Settings、helper 和运行库均为 ARM64。MSI 和原生 ARM64 Inno Setup 引导程序尚未提供。
+x64 包使用 Inno Setup 7 生成 x64 EXE，安装到 `<ProgramFiles>/Fcitx5`，内置共享同一 x64 Core 的 x64/x86 TSF。ARM64 包使用 Inno Setup 生成 x86 Setup 引导程序（在 Windows on Arm 上经 x86 模拟运行），但限制仅在 Windows 11 ARM64（build 22000+）上安装，并启用 ARM64 64 位安装模式；实际 Core、TSF、Settings、helper 和运行时本体均为 ARM64。微软 VC++ ARM64 Redistributable 使用 x86 引导程序安装 ARM64 运行库。MSI 和原生 ARM64 Inno Setup 引导程序尚未提供。
 
 | CI 包名 | 运行库策略 |
 | --- | --- |
