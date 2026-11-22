@@ -16,7 +16,7 @@ function Assert-Failure([scriptblock]$Action, [string]$Message) {
 }
 
 try {
-    foreach ($file in @($entry, "$PSScriptRoot/build-pinyin.ps1", "$PSScriptRoot/build-tsf.ps1", "$PSScriptRoot/deploy-tsf.ps1")) {
+    foreach ($file in @($entry, "$PSScriptRoot/build-pinyin.ps1", "$PSScriptRoot/build-tsf.ps1", "$PSScriptRoot/build-settings.ps1", "$PSScriptRoot/deploy-tsf.ps1")) {
         $tokens = $null
         $parseErrors = $null
         [void][Management.Automation.Language.Parser]::ParseFile($file, [ref]$tokens, [ref]$parseErrors)
@@ -167,7 +167,8 @@ endif()
         $environmentBefore = @(Get-ChildItem Env: | Sort-Object Name | ForEach-Object { "$($_.Name)=$($_.Value)" })
         & $entry -Prefix './deployment' -BuildRoot './build' -ModernApps -WhatIf
         & "$PSScriptRoot/build-tsf.ps1" -Architecture x86 -BuildRoot './build' -WhatIf
-        if ((Test-Path $prefix) -or (Test-Path $buildRoot)) { throw 'WhatIf created build/deployment files.' }
+        & "$PSScriptRoot/build-tsf.ps1" -Architecture arm64 -BuildRoot './build-arm64' -WhatIf
+        if ((Test-Path $prefix) -or (Test-Path $buildRoot) -or (Test-Path './build-arm64')) { throw 'WhatIf created build/deployment files.' }
         $environmentAfter = @(Get-ChildItem Env: | Sort-Object Name | ForEach-Object { "$($_.Name)=$($_.Value)" })
         if (Compare-Object $environmentBefore $environmentAfter) { throw 'WhatIf changed the environment.' }
         Assert-Failure { & $entry -Prefix $root -WhatIf } 'inside this repository'

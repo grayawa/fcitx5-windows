@@ -103,6 +103,12 @@ $registry[$profile].IconIndex = 1
 Assert-Failure { Assert-TsfRegistration -DllPath $dll -ModernApps } 'TSF language profile'
 $registry[$profile].IconIndex = 0
 Assert-TsfRegistration -DllPath $dll.ToLowerInvariant() -ModernApps
+$arm64Dll = 'C:\Program Files\Fcitx5\tsf\fcitx5-arm64.dll'
+$registry[$server].'(default)' = $arm64Dll
+$registry[$profile].IconFile = $arm64Dll
+Assert-TsfRegistration -DllPath $arm64Dll -Architecture arm64 -ProfileDllPath $arm64Dll -ModernApps
+$registry[$server].'(default)' = $dll
+$registry[$profile].IconFile = $dll
 $x86Server = "HKLM:\SOFTWARE\Classes\Wow6432Node\CLSID\$clsid\InprocServer32"
 $x86Dll = 'C:\Program Files\Fcitx5\tsf\x86\fcitx5-x86.dll'
 $registry[$x86Server] = [pscustomobject]@{ '(default)' = $x86Dll; ThreadingModel = 'Apartment' }
@@ -128,6 +134,7 @@ if (!$start -or !$end) { throw 'Missing dual-architecture smoke sequence.' }
 $sequence = [scriptblock]::Create($ast.Extent.Text.Substring(
     $start.Extent.StartOffset, $end.Extent.StartOffset - $start.Extent.StartOffset))
 $InstallRoot = 'C:\Program Files\Fcitx5'
+$Architecture = 'x64'
 $ModernApps = $true
 $actions = [Collections.Generic.List[string]]::new()
 function Invoke-ProcessChecked {
@@ -166,4 +173,4 @@ Assert-Failure { Assert-TsfRegistration -DllPath $dll -ProfileDllPath @($dll, $x
 $registry[$profile].IconFile = $dll
 $registry[$x86Server].'(default)' = $dll
 Assert-Failure { Assert-TsfRegistration -DllPath $x86Dll -Architecture x86 -ProfileDllPath @($dll, $x86Dll) -ModernApps } 'TSF COM registration'
-Write-Output 'PASS: desktop/modern categories, both COM views, shared profile icons and smoke registrar sequence (mock registry; no installation).'
+Write-Output 'PASS: desktop/modern categories, x86/x64/ARM64 COM views, shared profile icons and x64 smoke registrar sequence (mock registry; no installation).'

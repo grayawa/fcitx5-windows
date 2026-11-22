@@ -14,8 +14,12 @@ function Get-PeMachine {
 }
 
 function Assert-PeMachine {
-    param([string]$Path, [ValidateSet('x86', 'x64')][string]$Architecture)
-    $expected = if ($Architecture -eq 'x86') { 0x14c } else { 0x8664 }
+    param([string]$Path, [ValidateSet('x86', 'x64', 'arm64')][string]$Architecture)
+    $expected = switch ($Architecture) {
+        'x86' { 0x14c }
+        'arm64' { 0xaa64 }
+        default { 0x8664 }
+    }
     $actual = Get-PeMachine $Path
     if ($actual -ne $expected) {
         throw ('PE machine mismatch: {0}; expected {1} (0x{2:x4}), got 0x{3:x4}' -f $Path, $Architecture, $expected, $actual)

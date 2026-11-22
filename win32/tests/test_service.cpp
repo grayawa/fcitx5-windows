@@ -74,7 +74,12 @@ int main() {
             } else {
                 InterlockedIncrement(&counts->settings);
             }
-            while (!process.stopping()) {
+            wchar_t ignoreStop[8]{};
+            const bool ignoreStopEvent =
+                GetEnvironmentVariableW(L"FCITX5_TEST_SERVICE_IGNORE_STOP",
+                                        ignoreStop, 8) > 0 &&
+                ignoreStop[0] == L'1';
+            while (ignoreStopEvent || !process.stopping()) {
                 Sleep(10);
             }
         }
@@ -147,6 +152,33 @@ int main() {
             assert(failed && !missing.running(L"Core"));
             assert(!missing.ensureCore());
         }
+        // A child that ignores the stop event must time out without leaving
+        // the service permanently disabled after a failed restart.
+        assert(SetEnvironmentVariableW(L"FCITX5_TEST_SERVICE_IGNORE_STOP", L"1"));
+        {
+            ipc::ServiceController control(core, identity);
+            assert(!control.restart());
+        }
+        assert(SetEnvironmentVariableW(L"FCITX5_TEST_SERVICE_IGNORE_STOP", nullptr));
+        waitStarts(counts, 4, 2);
+        {
+            ipc::ServiceController control(core, identity);
+            bool timedOut = false;
+            try {
+                control.restart();
+            } catch (const std::system_error &error) {
+                timedOut = error.code().value() == ERROR_TIMEOUT;
+            }
+            assert(timedOut);
+            assert(ipc::readServiceState(identity).disabled == 0);
+            HANDLE process = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, FALSE,
+                                         counts->corePid);
+            assert(process);
+            assert(TerminateProcess(process, 0));
+            assert(WaitForSingleObject(process, 5000) == WAIT_OBJECT_0);
+            CloseHandle(process);
+            control.stop();
+        }
     } catch (...) {
         ipc::ServiceController control(core, identity);
         control.stop();
@@ -166,5 +198,5 @@ int main() {
     assert(!fs::exists(prefix));
     std::cout
         << "PASS: concurrent start, single instance, manual stop, restart, "
-           "settings lifetime and missing executable\n";
+           "settings lifetime, missing executable and restart-state recovery\n";
 }

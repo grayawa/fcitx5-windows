@@ -7,12 +7,18 @@ validation and development registration.
 
 ## Installer Packages
 
-The CI/Nightly workflow publishes four x64 installers for Windows 10 version
-1809 (build 17763) or later: `base` (`fcitx5-chinese-addons`) and `full` (all
-bundled plugins under `plugins/`: `fcitx5-chinese-addons`, `fcitx5-rime`,
-`fcitx5-table-extra`, `fcitx5-wenzhounese` and `fcitx5-zhuyin`), each with or
-without bundled Visual C++ and Windows App Runtime installers. See
-[Install in the README](../README.md#install) and
+The CI/Nightly workflow publishes four x64 installers (`base` and `full`,
+each with or without bundled runtimes) plus two ARM64 `base` installers
+(runtime/no-runtime). The x64 `full` edition includes all bundled plugins
+under `plugins/`: `fcitx5-chinese-addons`, `fcitx5-rime`,
+`fcitx5-table-extra`, `fcitx5-wenzhounese` and `fcitx5-zhuyin`.
+The ARM64 installer currently contains the native ARM64 base runtime only;
+the additional plugin build path is still AMD64-specific.
+
+The ARM64 package uses an x86 Inno Setup bootstrapper (run by Windows on Arm's
+x86 emulation), restricted to Windows 11 ARM64 (build 22000+) and configured
+for 64-bit install mode. Its Core, TSF, Settings, helpers and installed runtime payloads are ARM64; Microsoft prerequisite installers are signed bootstrappers (the VC++ ARM64 redistributable uses an x86 bootstrapper).
+See [Install in the README](../README.md#install) and
 [installer implementation](windows-installer-design.md).
 
 ## Prerequisites
@@ -23,8 +29,9 @@ tools and runtimes are already installed):
 | Component | Requirements |
 | --- | --- |
 | Shared tools | CMake 3.27+, Git and PowerShell |
-| Core / input methods | MSYS2 `clang64` Clang, Ninja, pkgconf, ECM, dlfcn, libuv, gettext, Boost headers/iostreams and zstd; pinned libime/`fcitx5-chinese-addons` data supplies Pinyin, Shuangpin and base table methods |
-| Full plugin edition | Git LFS; matching `clang64` `mingw-w64-clang-x86_64-librime` and `mingw-w64-clang-x86_64-librime-data` for Rime; `clang64` `glib2` and `db` for Zhuyin |
+| Core / input methods (x64) | MSYS2 `clang64` Clang, Ninja, pkgconf, ECM, dlfcn, libuv, gettext, Boost headers/iostreams and zstd; pinned libime/`fcitx5-chinese-addons` data supplies Pinyin, Shuangpin and base table methods |
+| Native ARM64 Core / TSF | MSYS2 `clangarm64` toolchain and matching ARM64 packages; Visual Studio ARM64 C++ toolchain for Setup/Settings components |
+| Full plugin edition (currently x64) | Git LFS; matching `clang64` `mingw-w64-clang-x86_64-librime` and `mingw-w64-clang-x86_64-librime-data` for Rime; `clang64` `glib2` and `db` for Zhuyin |
 | TSF | Standalone LLVM (`clang`, `clang++`, `llvm-rc`; LLVM 22+ required with MSVC 14.52+, CI pins `22.1.8`), Windows SDK, x64/x86 MSVC tools and ATL, ImageMagick (`magick`) |
 | Settings | Visual Studio MSVC x64 tools, MSBuild, NuGet and Windows SDK 10.0.22000.0+ |
 | Settings runtime | x64 Windows App SDK 1.8 Framework/DDLM >= `8000.994.2142.0` and Visual C++ runtime for the current user |
@@ -305,21 +312,29 @@ signed/installed modern apps remain pending.
 
 ## CI Build and Artifact Flow
 
-CI builds each x64 component once in Release and runs validation and packaging
-in parallel jobs (`.github/workflows/ci.yml`):
+CI builds the x64 and native ARM64 components in Release and runs
+architecture-specific validation and packaging in parallel jobs
+(`.github/workflows/ci.yml`):
 
 | Job | Responsibility |
 | --- | --- |
 | `build-x64` | Install pinned LLVM `22.1.8` and MSYS2 deps; build `base` with `-ModernApps -SkipTests`; copy and build all additional plugins for `full`; verify Wenzhounese, `table-extra` (Wubi98/Cangjie5/Jyutping Table) and Zhuyin commits plus Zhuyin model save/reload (`zhuyin_model_probe`); upload base/full runtimes, portable TSF tests/probes and standalone Settings |
+| `build-arm64` | Build native ARM64 Core, TSF and WinUI Settings; run the ARM64 TSF CTest suite; audit runtime/probe PE machine types; upload ARM64 runtime and integration probes |
 | `test-x64` | Download `base` runtime and portable tests; run `test-build-and-deploy.ps1`, `test-build-plugins.ps1`, `test-installer-registration.ps1`, icon MD5 check, `test-pinyin.ps1` (including CTest), `test-inputmethods.ps1`, `test-engine-localization.ps1` and `test-dictionaries.ps1` |
 | `test-x86` | Install pinned LLVM `22.1.8`; build/test independent x86 TSF; run x86 Pinyin/TSF probes with concurrent x86/x64 Pipe clients (`-PeerTsfBuild`) and dual-arch deployment checks (`test-deploy-tsf.ps1`) |
+| `test-arm64` | Run native ARM64 Core/TSF integration on Windows 11 ARM; verify ARM64 PE images, Pinyin/TSF IPC, input-method persistence, localization and dictionary loading. No mixed-architecture clients or DLLs are tested |
 | `package-installer-x64` | 2×2 matrix (`base`/`full` × `runtime`/`no-runtime`); run `test-build-installer.ps1`, `test-installer-wizard.ps1` and `test-installer-restart.ps1`; build installer; verify `table-extra` and Zhuyin manifests in `full` / absence in `base` |
+| `package-installer-arm64` | `base` × `runtime`/`no-runtime`; build an x86 Inno Setup bootstrapper with an ARM64-only payload and architecture-matched runtime dependencies |
 | `installer-smoke-x64` | Run silent machine-only install, modern TSF registration checks, uninstall and cleanup for both `base` and `full` no-runtime installers |
-| `release` | After all jobs succeed on `master` (unless commit message contains `!release`), replace the `latest` prerelease with the four installers and their SHA256 files |
+| `installer-smoke-arm64` | On Windows 11 ARM, run the x86 bootstrapper under emulation; verify native ARM64 PE files, TSF registration, runtime installation and uninstall |
+| `release` | After all jobs succeed on `master` (unless commit message contains `!release`), replace the `latest` prerelease with four x64 installers and two ARM64 base installers, plus their SHA256 files |
 
 `test-x64`, `test-x86` and `package-installer-x64` start in parallel as soon as
-`build-x64` finishes. The portable test bundle exports a relative-path manifest
-via `ctest --show-only=json-v1` and restores CTest entries on the test runner
+`build-x64` finishes. `test-arm64` and `package-installer-arm64` depend only on
+`build-arm64`; they do not wait for or consume x64 build artifacts. The ARM64
+smoke test waits for the native ARM64 tests and installer package. The x64
+portable test bundle exports a relative-path manifest via
+`ctest --show-only=json-v1` and restores CTest entries on the test runner
 without reconfiguring CMake. Installer artifacts use compression level 0.
 
 ## Build Installer Packages
@@ -331,11 +346,19 @@ to select `ISCC.exe` explicitly):
 ./scripts/build-and-deploy.ps1 -Prefix ./dist/installer-stage -BuildRoot ./build/installer
 ./scripts/build-installer.ps1 -Prefix ./dist/installer-stage -Output ./dist/installer -SkipRuntimes
 ./scripts/build-installer.ps1 -Prefix ./dist/installer-stage -Dependencies ./build/installer-deps -Output ./dist/installer
+./scripts/build-installer.ps1 -Architecture arm64 -Prefix ./dist/ci-arm64 -Output ./dist/installer -SkipRuntimes
+./scripts/build-installer.ps1 -Architecture arm64 -Prefix ./dist/ci-arm64 -Dependencies ./build/installer-deps -Output ./dist/installer
 ```
 
-Bundled-runtime builds require `vc_redist.x64.exe` and
-`WindowsAppRuntimeInstall-x64.exe` in `-Dependencies`, matching the SHA256
-values in `cmake/installer-lock.json`. `-PackageVersion` defaults to `0.1.0.0`;
+Bundled-runtime x64 builds require `vc_redist.x64.exe` and
+`WindowsAppRuntimeInstall-x64.exe`; ARM64 builds require `vc_redist.arm64.exe`
+and `WindowsAppRuntimeInstall-arm64.exe`. The pinned VC++ hashes and Microsoft
+publisher/version metadata are in `cmake/installer-lock.json`. The ARM64
+VC++ redistributable is an x86 Microsoft-signed bootstrapper that installs the
+ARM64 runtime; the Windows App Runtime installer is checked for its Microsoft
+Authenticode signature. The installed application PE files are checked as ARM64. `-Architecture arm64` selects the
+ARM64-only payload and x86 Inno Setup bootstrapper. `-PackageVersion` defaults
+to `0.1.0.0`;
 `-PackageName` overrides the output basename. Each build outputs `.exe`,
 `.exe.sha256`, `.manifest.txt` and per-file runtime manifests under `metadata/`.
 All paths must stay inside the repository.
@@ -473,3 +496,20 @@ first; unverified owners are skipped). Stop Core/Settings from the indicator
 menu beforehand. Supply `-HandlePath` if Sysinternals Handle is not in `PATH`;
 otherwise the script falls back to `tasklist /m` and accessible module lists.
 `-WhatIf` makes no system changes and needs no elevation.
+
+## ARM64 Windows CI
+
+The CI workflow builds the native ARM64 Core, TSF frontend and WinUI
+Settings application on a GitHub-hosted Windows 11 ARM64 runner, using MSYS2
+`CLANGARM64` and the Visual Studio ARM64 toolchain. It uploads separate
+`Fcitx5-runtime-arm64` and `Fcitx5-tests-arm64` artifacts. The ARM64 test job
+covers only ARM64 Core + ARM64 TSF: no ARM64/x64 mixed IPC or DLL combinations
+are part of the supported matrix.
+
+The workflow also builds ARM64 base installers with an x86 Inno Setup
+bootstrapper restricted to Windows 11 ARM64 and 64-bit install mode. All
+installed application binaries and runtime payloads are ARM64; Microsoft
+prerequisite installers may use an x86 bootstrapper. A native
+Windows 11 ARM smoke job runs install, TSF registration and uninstall. The
+Nightly release includes both ARM64 base variants; the ARM64 full-plugin edition
+is deferred until the additional plugin build dependencies support ARM64.

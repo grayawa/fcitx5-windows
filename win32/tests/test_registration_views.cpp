@@ -1,5 +1,6 @@
 #include "../dll/register.h"
 #include "../dll/util.h"
+#include "../setup/architecture.h"
 #include <cassert>
 #include <map>
 
@@ -61,22 +62,23 @@ LSTATUS WINAPI closeKey(HKEY key) {
 
 int main() {
     const auto root = HKEY_LOCAL_MACHINE;
-    const std::wstring x64 = L"C:/Fcitx5/tsf/fcitx5-x86_64.dll";
+    const std::wstring native =
+        L"C:/Fcitx5/" + std::wstring(fcitx::setup::kNativeTsfDllWide);
     const std::wstring x86 = L"C:/Fcitx5/tsf/x86/fcitx5-x86.dll";
-    assert(fcitx::RegisterServerAt(root, x64, KEY_WOW64_64KEY) == S_OK);
+    assert(fcitx::RegisterServerAt(root, native, KEY_WOW64_64KEY) == S_OK);
     assert(fcitx::RegisterServerAt(root, x86, KEY_WOW64_32KEY) == S_OK);
     assert(servers.at(KEY_WOW64_32KEY) == x86);
-    assert(servers.at(KEY_WOW64_64KEY) == x64);
+    assert(servers.at(KEY_WOW64_64KEY) == native);
     assert(fcitx::UnregisterServerAt(root, KEY_WOW64_32KEY) == S_OK);
     assert(!servers.contains(KEY_WOW64_32KEY));
-    assert(servers.at(KEY_WOW64_64KEY) == x64);
+    assert(servers.at(KEY_WOW64_64KEY) == native);
     assert(fcitx::RegisterServerAt(root, x86, KEY_WOW64_32KEY) == S_OK);
     assert(fcitx::UnregisterServerAt(root, KEY_WOW64_64KEY) == S_OK);
     assert(servers.at(KEY_WOW64_32KEY) == x86);
-    assert(fcitx::RegisterServerAt(root, x64, 0) == E_INVALIDARG);
+    assert(fcitx::RegisterServerAt(root, native, 0) == E_INVALIDARG);
     assert(fcitx::UnregisterServerAt(nullptr) == E_INVALIDARG);
     failure = ERROR_ACCESS_DENIED;
-    assert(fcitx::RegisterServerAt(root, x64) == HRESULT_FROM_WIN32(failure));
+    assert(fcitx::RegisterServerAt(root, native) == HRESULT_FROM_WIN32(failure));
     assert(fcitx::UnregisterServerAt(root) == HRESULT_FROM_WIN32(failure));
     assert(handles.empty());
 }

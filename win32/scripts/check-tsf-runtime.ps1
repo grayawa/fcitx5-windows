@@ -2,7 +2,7 @@
 param(
     [Parameter(Mandatory)][string]$DllPath,
     [string]$ReadObjPath = '',
-    [ValidateSet('x86', 'x64')][string]$Architecture = ''
+    [ValidateSet('x86', 'x64', 'arm64')][string]$Architecture = ''
 )
 
 $ErrorActionPreference = 'Stop'

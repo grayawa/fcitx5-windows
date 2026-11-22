@@ -13,8 +13,8 @@ endif()
 project(fcitx5-win32 VERSION 0.1.0)
 enable_language(RC)
 
-set(TSF_ARCH "" CACHE STRING "TSF target architecture (x64 or x86)")
-set_property(CACHE TSF_ARCH PROPERTY STRINGS x64 x86)
+set(TSF_ARCH "" CACHE STRING "TSF target architecture (x64, x86 or arm64)")
+set_property(CACHE TSF_ARCH PROPERTY STRINGS x64 x86 arm64)
 include(CheckCXXSourceCompiles)
 check_cxx_source_compiles("
 #if !defined(_M_X64) && !defined(__x86_64__)
@@ -26,19 +26,28 @@ check_cxx_source_compiles("
 #error Expected x86 compiler
 #endif
 int main() { static_assert(sizeof(void*) == 4); }" TSF_COMPILER_X86)
+check_cxx_source_compiles("
+#if !defined(_M_ARM64) && !defined(__aarch64__)
+#error Expected ARM64 compiler
+#endif
+int main() { static_assert(sizeof(void*) == 8); }" TSF_COMPILER_ARM64)
 if(TSF_COMPILER_X64)
     set(detected_tsf_arch x64)
 elseif(TSF_COMPILER_X86)
     set(detected_tsf_arch x86)
+elseif(TSF_COMPILER_ARM64)
+    set(detected_tsf_arch arm64)
 else()
-    message(FATAL_ERROR "Only x64 and x86 TSF targets are supported")
+    message(FATAL_ERROR "Only x64, x86 and ARM64 TSF targets are supported")
 endif()
 if(TSF_ARCH AND NOT TSF_ARCH STREQUAL detected_tsf_arch)
     message(FATAL_ERROR "TSF_ARCH=${TSF_ARCH} disagrees with compiler target ${detected_tsf_arch}; use a separate build tree and matching VS environment")
 endif()
-set(TSF_ARCH "${detected_tsf_arch}" CACHE STRING "TSF target architecture (x64 or x86)" FORCE)
+set(TSF_ARCH "${detected_tsf_arch}" CACHE STRING "TSF target architecture (x64, x86 or arm64)" FORCE)
 if(TSF_ARCH STREQUAL "x86")
     set(TSF_TARGET fcitx5-x86)
+elseif(TSF_ARCH STREQUAL "arm64")
+    set(TSF_TARGET fcitx5-arm64)
 else()
     set(TSF_TARGET fcitx5-x86_64)
 endif()

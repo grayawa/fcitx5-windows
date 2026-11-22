@@ -3,6 +3,7 @@
 #include "../ipc/isolationpolicy.h"
 #include "log.h"
 #include "upgrade.h"
+#include "architecture.h"
 #include <atlbase.h>
 #include <atlcomcli.h>
 #include <boost/property_tree/json_parser.hpp>
@@ -443,7 +444,7 @@ class NativeMachine : public Machine {
                         regString((std::wstring(kClsid) + L"\\InprocServer32")
                                       .c_str(),
                                   nullptr),
-                        root_ / "tsf" / "fcitx5-x86_64.dll"))
+                        root_ / kNativeTsfDll))
                     fail(ERROR_ALREADY_EXISTS);
             } catch (const std::system_error &error) {
                 if (error.code().value() != ERROR_FILE_NOT_FOUND ||
@@ -794,7 +795,7 @@ class NativeMachine : public Machine {
             if (code)
                 fail(code);
         }
-        const auto dll = root_ / "tsf" / "fcitx5-x86_64.dll";
+        const auto dll = root_ / kNativeTsfDll;
         auto module = LoadLibraryExW(dll.c_str(), nullptr,
                                      LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
                                          LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
@@ -809,7 +810,7 @@ class NativeMachine : public Machine {
         verifyVersion(value);
     }
     void verifyVersion(const Manifest &value) override {
-        std::vector<fs::path> dlls{root_ / "tsf/fcitx5-x86_64.dll"};
+        std::vector<fs::path> dlls{root_ / kNativeTsfDll};
         verifyTsfServer(dlls.front(), RRF_SUBKEY_WOW6464KEY);
         if (std::any_of(value.files.begin(), value.files.end(),
                         [](const File &file) {
@@ -873,9 +874,9 @@ class NativeMachine : public Machine {
         for (const auto &file : value.dependencies) {
             const auto code = process(
                 transaction / "dependencies" / relativePath(file.path),
-                file.path == "vc_redist.x64.exe" ? L"/install /quiet /norestart"
+                file.path == kVCRedistFile ? L"/install /quiet /norestart"
                                                  : L"--quiet");
-            if (code && !(file.path == "vc_redist.x64.exe" && code == 1638))
+            if (code && !(file.path == kVCRedistFile && code == 1638))
                 return code;
         }
         return ERROR_SUCCESS;

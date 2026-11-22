@@ -4,11 +4,16 @@ param(
     [string]$InstallerPath,
     [string]$InstallRoot = '',
     [string]$LogPath = '',
+    [ValidateSet('x64', 'arm64')][string]$Architecture = 'x64',
     [switch]$ModernApps
 )
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
+if ($Architecture -eq 'arm64' -and
+    [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString() -ne 'Arm64') {
+    throw 'ARM64 installer smoke test must run from a native ARM64 PowerShell process.'
+}
 $installer = (Resolve-Path -LiteralPath $InstallerPath).Path
 if ([IO.Path]::GetExtension($installer) -ine '.exe') {
     throw "InstallerPath must point to an .exe: $installer"
@@ -62,7 +67,7 @@ function Assert-Path {
 
 function Assert-TsfRegistration {
     param([string]$DllPath, [switch]$ModernApps,
-        [ValidateSet('x64', 'x86')][string]$Architecture = 'x64',
+        [ValidateSet('x64', 'x86', 'arm64')][string]$Architecture = 'x64',
         [string[]]$ProfileDllPath = @())
 
     $clsid = '{FC3869BA-51E3-4078-8EE2-5FE49493A1F4}'
@@ -132,17 +137,55 @@ try {
     )
     Invoke-ProcessChecked -FilePath $installer -ArgumentList $installArguments -AllowedExitCodes @(0, 3010) | Out-Null
 
-    foreach ($path in @(
-            (Join-Path $InstallRoot 'bin/Fcitx5.exe'),
+    $expectedPayload = @(
+        (Join-Path $InstallRoot 'bin/Fcitx5.exe'),
+        (Join-Path $InstallRoot 'settings/Fcitx5Settings.exe'),
+        $helper,
+        (Join-Path $InstallRoot 'setup/maintenance-host/Fcitx5Upgrade.exe'),
+        (Join-Path $InstallRoot 'setup/runtime-manifest.json'),
+        (Join-Path $InstallRoot 'setup/managed-install'),
+        (Join-Path $InstallRoot 'setup/install-state'))
+    if ($Architecture -eq 'arm64') {
+        $expectedPayload += Join-Path $InstallRoot 'tsf/fcitx5-arm64.dll'
+    } else {
+        $expectedPayload += @(
             (Join-Path $InstallRoot 'tsf/fcitx5-x86_64.dll'),
-            (Join-Path $InstallRoot 'tsf/x86/fcitx5-x86.dll'),
-            (Join-Path $InstallRoot 'settings/Fcitx5Settings.exe'),
-            $helper,
-            (Join-Path $InstallRoot 'setup/maintenance-host/Fcitx5Upgrade.exe'),
-            (Join-Path $InstallRoot 'setup/runtime-manifest.json'),
-            (Join-Path $InstallRoot 'setup/managed-install'),
-            (Join-Path $InstallRoot 'setup/install-state'))) {
-        Assert-Path $path
+            (Join-Path $InstallRoot 'tsf/x86/fcitx5-x86.dll'))
+    }
+    foreach ($path in $expectedPayload) { Assert-Path $path }
+    $runtimeManifest = Get-Content -Raw -LiteralPath (Join-Path $InstallRoot 'setup/runtime-manifest.json') | ConvertFrom-Json
+    if ($runtimeManifest.architecture -ne $Architecture) {
+        throw "Installer runtime manifest architecture mismatch: expected $Architecture, got $($runtimeManifest.architecture)."
+    }
+    if ($Architecture -eq 'arm64' -and $runtimeManifest.dependencies.Count -gt 0) {
+        $appRuntimeInstaller = Join-Path $InstallRoot 'setup/WindowsAppRuntimeInstall-arm64.exe'
+        Assert-Path $appRuntimeInstaller
+        $signature = Get-AuthenticodeSignature $appRuntimeInstaller
+        if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'CN=Microsoft Corporation') {
+            throw "ARM64 Windows App Runtime installer signature is invalid: $($signature.Status)"
+        }
+    }
+    if ($Architecture -eq 'arm64' -and
+        ((Test-Path -LiteralPath (Join-Path $InstallRoot 'tsf/fcitx5-x86_64.dll')) -or
+         (Test-Path -LiteralPath (Join-Path $InstallRoot 'tsf/x86/fcitx5-x86.dll')))) {
+        throw 'ARM64 installer unexpectedly installed an x64 or x86 TSF frontend.'
+    }
+    . "$root/win32/scripts/pe-machine.ps1"
+    if ($Architecture -eq 'arm64') {
+        foreach ($relative in @('bin/Fcitx5.exe', 'tsf/fcitx5-arm64.dll',
+                'settings/Fcitx5Settings.exe', 'setup/Fcitx5SetupHelper.exe',
+                'setup/maintenance-host/Fcitx5Upgrade.exe')) {
+            Assert-PeMachine (Join-Path $InstallRoot $relative) arm64
+        }
+        foreach ($image in Get-ChildItem -LiteralPath $InstallRoot -Recurse -File |
+                Where-Object { ($_.Extension -in @('.exe', '.dll')) -and $_.Name -notlike 'unins*.exe' -and $_.Name -ne 'WindowsAppRuntimeInstall-arm64.exe' }) {
+            Assert-PeMachine $image.FullName arm64
+        }
+    } else {
+        Assert-PeMachine (Join-Path $InstallRoot 'bin/Fcitx5.exe') x64
+        Assert-PeMachine (Join-Path $InstallRoot 'tsf/fcitx5-x86_64.dll') x64
+        Assert-PeMachine (Join-Path $InstallRoot 'tsf/x86/fcitx5-x86.dll') x86
+        Assert-PeMachine (Join-Path $InstallRoot 'settings/Fcitx5Settings.exe') x64
     }
     if ((Get-Content -LiteralPath (Join-Path $InstallRoot 'setup/install-state') -Raw).Trim() -ne 'installed') {
         throw 'Installer did not leave the expected installed state.'
@@ -156,23 +199,33 @@ try {
     Assert-Path $uninstallKey
     $x86Dll = Join-Path $InstallRoot 'tsf/x86/fcitx5-x86.dll'
     $x64Dll = Join-Path $InstallRoot 'tsf/fcitx5-x86_64.dll'
-    # CTF TIP profile/category keys are shared; COM servers remain view-specific.
-    # Either registrar can supply the shared icon; both DLLs belong to this install.
-    $profileDlls = @($x64Dll, $x86Dll)
-    Assert-TsfRegistration -DllPath $x64Dll -ProfileDllPath $profileDlls -ModernApps:$ModernApps
-    Assert-TsfRegistration -DllPath $x86Dll -Architecture x86 `
-        -ProfileDllPath $profileDlls -ModernApps:$ModernApps
+    if ($Architecture -eq 'arm64') {
+        $arm64Dll = Join-Path $InstallRoot 'tsf/fcitx5-arm64.dll'
+        Assert-TsfRegistration -DllPath $arm64Dll -Architecture arm64 -ProfileDllPath @($arm64Dll) -ModernApps:$ModernApps
+        # System32 is the native ARM64 registrar on the Windows 11 ARM runner.
+        $nativeRegistrar = Join-Path $env:WINDIR 'System32/regsvr32.exe'
+        Assert-PeMachine $nativeRegistrar arm64
+        Invoke-ProcessChecked -FilePath $nativeRegistrar -ArgumentList @('/s', '/u', "`"$arm64Dll`"") | Out-Null
+        Invoke-ProcessChecked -FilePath $nativeRegistrar -ArgumentList @('/s', "`"$arm64Dll`"") | Out-Null
+        Assert-TsfRegistration -DllPath $arm64Dll -Architecture arm64 -ProfileDllPath @($arm64Dll) -ModernApps:$ModernApps
+    } else {
+        # CTF TIP profile/category keys are shared; COM servers remain view-specific.
+        # Either registrar can supply the shared icon; both DLLs belong to this install.
+        $profileDlls = @($x64Dll, $x86Dll)
+        Assert-TsfRegistration -DllPath $x64Dll -ProfileDllPath $profileDlls -ModernApps:$ModernApps
+        Assert-TsfRegistration -DllPath $x86Dll -Architecture x86 -ProfileDllPath $profileDlls -ModernApps:$ModernApps
 
-    # Each registrar must leave the other architecture's registration usable.
-    $x86Registrar = Join-Path $env:WINDIR 'SysWOW64/regsvr32.exe'
-    $x64Registrar = Join-Path $env:WINDIR 'System32/regsvr32.exe'
-    Invoke-ProcessChecked -FilePath $x86Registrar -ArgumentList @('/s', '/u', "`"$x86Dll`"") | Out-Null
-    Assert-TsfRegistration -DllPath $x64Dll -ProfileDllPath $profileDlls -ModernApps:$ModernApps
-    Invoke-ProcessChecked -FilePath $x86Registrar -ArgumentList @('/s', "`"$x86Dll`"") | Out-Null
-    Invoke-ProcessChecked -FilePath $x64Registrar -ArgumentList @('/s', '/u', "`"$x64Dll`"") | Out-Null
-    Assert-TsfRegistration -DllPath $x86Dll -Architecture x86 -ProfileDllPath $profileDlls -ModernApps:$ModernApps
-    Invoke-ProcessChecked -FilePath $x64Registrar -ArgumentList @('/s', "`"$x64Dll`"") | Out-Null
-    Assert-TsfRegistration -DllPath $x64Dll -ProfileDllPath $profileDlls -ModernApps:$ModernApps
+        # Each registrar must leave the other architecture's registration usable.
+        $x86Registrar = Join-Path $env:WINDIR 'SysWOW64/regsvr32.exe'
+        $x64Registrar = Join-Path $env:WINDIR 'System32/regsvr32.exe'
+        Invoke-ProcessChecked -FilePath $x86Registrar -ArgumentList @('/s', '/u', "`"$x86Dll`"") | Out-Null
+        Assert-TsfRegistration -DllPath $x64Dll -ProfileDllPath $profileDlls -ModernApps:$ModernApps
+        Invoke-ProcessChecked -FilePath $x86Registrar -ArgumentList @('/s', "`"$x86Dll`"") | Out-Null
+        Invoke-ProcessChecked -FilePath $x64Registrar -ArgumentList @('/s', '/u', "`"$x64Dll`"") | Out-Null
+        Assert-TsfRegistration -DllPath $x86Dll -Architecture x86 -ProfileDllPath $profileDlls -ModernApps:$ModernApps
+        Invoke-ProcessChecked -FilePath $x64Registrar -ArgumentList @('/s', "`"$x64Dll`"") | Out-Null
+        Assert-TsfRegistration -DllPath $x64Dll -ProfileDllPath $profileDlls -ModernApps:$ModernApps
+    }
 
     $uninstallArguments = @('uninstall', '--silent', '--prefix', "`"$InstallRoot`"")
     $uninstallCode = Invoke-ProcessChecked -FilePath $helper -ArgumentList $uninstallArguments -AllowedExitCodes @(0, 3010)

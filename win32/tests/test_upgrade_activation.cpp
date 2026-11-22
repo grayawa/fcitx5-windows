@@ -1,4 +1,5 @@
 #include "../setup/upgrade.h"
+#include "../setup/architecture.h"
 #include <cassert>
 #include <iostream>
 
@@ -67,9 +68,12 @@ int main() {
         const auto name = redirected(server.c_str(), view);
         assert(RegCreateKeyExW(HKEY_CURRENT_USER, name.c_str(), 0, nullptr, 0,
                                KEY_ALL_ACCESS, nullptr, &key, nullptr) == 0);
+        const auto nativePath =
+            (std::filesystem::path(L"C:\\Fcitx5") /
+             fcitx::setup::kNativeTsfDll).wstring();
         const std::wstring path = view == KEY_WOW64_32KEY
                                       ? L"C:\\Fcitx5\\tsf\\x86\\fcitx5-x86.dll"
-                                      : L"C:\\Fcitx5\\tsf\\fcitx5-x86_64.dll";
+                                      : nativePath;
         assert(RegSetValueExW(key, nullptr, 0, REG_SZ,
                               reinterpret_cast<const BYTE *>(path.c_str()),
                               DWORD((path.size() + 1) * sizeof(wchar_t))) == 0);

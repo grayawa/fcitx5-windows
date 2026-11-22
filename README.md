@@ -2,14 +2,15 @@
 
 [中文文档](README_zh-cn.md)
 
-An in-progress Windows port of Fcitx5 for AMD64. Core runs in a separate
-process, x64 and x86 TSF DLLs integrate with applications, and a WinUI 3
-settings app manages input methods and engine options.
+An in-progress Windows port of Fcitx5 for AMD64 and ARM64. Core runs in a
+separate process; x64 and x86 TSF DLLs integrate with x64 applications, while
+Windows on Arm uses a native ARM64 TSF frontend. A WinUI 3 settings app manages
+input methods and engine options.
 
 The `base` edition provides Pinyin, Shuangpin and the `fcitx5-chinese-addons`
-table input methods; the `full` edition adds Mozc (Japanese), Rime, Wenzhounese,
-Zhuyin and `fcitx5-table-extra`. Unified x64 installers are published by the CI
-and Nightly release workflow.
+table input methods; the x64 `full` edition adds Mozc (Japanese), Rime,
+Wenzhounese, Zhuyin and `fcitx5-table-extra`. CI/Nightly publishes x64 base/full
+installers and ARM64 base installers.
 
 ## Features
 
@@ -62,9 +63,9 @@ and Nightly release workflow.
 ## Install
 
 The [Nightly release](https://github.com/WAAutoMaton/fcitx5-windows/releases/tag/latest)
-publishes four x64 installers and their SHA256 checksums for Windows 10 version
-1809 (build 17763) or later. Both editions include Core, x64/x86 TSF DLLs and
-Settings:
+publishes four x64 installers and two ARM64 base installers, with SHA256
+checksums. The x64 installers target Windows 10 x64 version 1809 (build 17763)
+or later and include Core, x64/x86 TSF DLLs and Settings:
 
 - `base`: bundles `fcitx5-chinese-addons`.
 - `full`: bundles `fcitx5-chinese-addons`, `fcitx5-mozc`, `fcitx5-rime`,
@@ -78,9 +79,21 @@ Each edition comes in two runtime variants:
   x64 Windows App SDK 1.8 Framework/DDLM >= `8000.994.2142.0` to be installed
   beforehand for the current user.
 
-The installer deploys to Program Files, registers both x64 and x86 TSF DLLs
-sharing the x64 Core, configures the initiating user's input method and starts
-Core. Optional login startup is unchecked by default and respects manual
+The ARM64 base edition targets Windows 11 ARM64 build 22000 or later and is
+available in two variants:
+
+- `Fcitx5-<run>-base-arm64-setup.exe`: bundles ARM64 Visual C++ and Windows App
+  Runtime installers.
+- `Fcitx5-<run>-base-arm64-no-runtime-setup.exe`: requires the matching ARM64
+  Visual C++ runtime and ARM64 Windows App SDK 1.8 Framework/DDLM >=
+  `8000.994.2142.0` to be installed beforehand for the current user.
+
+The ARM64 package's Inno Setup bootstrapper is an x86 executable that runs under
+Windows on Arm's x86 emulation. The installed Core, TSF, Settings, helpers and
+runtime payloads are ARM64. Microsoft prerequisite installers are signed
+bootstrappers (the VC++ ARM64 redistributable itself uses an x86 bootstrapper).
+It registers only ARM64 TSF with the ARM64 Core. The x64 packages retain their existing x64 Core with x64/x86 TSF
+frontends. Optional login startup is unchecked by default and respects manual
 service stops. See [installer details](docs/windows-installer-design.md).
 
 Upgrades stage the new version while keeping the current version usable, return
@@ -95,7 +108,8 @@ scripts below are for development deployments only.
 
 ## Build and Deploy
 
-Prerequisites: CMake 3.27+, Git, MSYS2 `clang64` packages, standalone LLVM
+Prerequisites: CMake 3.27+, Git, MSYS2 `clang64` packages (x64) or
+`clangarm64` packages (native ARM64), standalone LLVM
 (22+ when using MSVC 14.52+), ImageMagick, and Visual Studio with C++ tools,
 Windows SDK, ATL, MSBuild and NuGet. Running Settings requires the Visual C++
 runtime and x64 Windows App SDK 1.8 Framework/DDLM >= `8000.994.2142.0`. See
