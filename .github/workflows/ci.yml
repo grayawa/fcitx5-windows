@@ -714,7 +714,8 @@ jobs:
           . ./win32/scripts/pe-machine.ps1
           # The ARM64 VC++ redistributable is shipped as an x86 bootstrapper;
           # it installs the ARM64 runtime on Windows on Arm.
-          Assert-PeMachine "build/installer-deps/$($vc.file)" x86
+          if ($vc.payloadArchitecture -ne 'arm64') { throw 'VC++ runtime lock is not targeting ARM64.' }
+          Assert-PeMachine "build/installer-deps/$($vc.file)" $vc.installerArchitecture
           # The Windows App Runtime installer is Microsoft-signed and versioned
           # for ARM64; its bootstrapper PE architecture is not the app payload ABI.
           foreach ($file in @($vc.file, $appRuntime.file)) {
@@ -836,7 +837,8 @@ jobs:
           Invoke-WebRequest -Uri $vc.url -OutFile $path
           if ((Get-FileHash $path -Algorithm SHA256).Hash -ne $vc.sha256) { throw 'ARM64 VC++ runtime hash mismatch.' }
           . ./win32/scripts/pe-machine.ps1
-          Assert-PeMachine $path x86
+          if ($vc.payloadArchitecture -ne 'arm64') { throw 'VC++ runtime lock is not targeting ARM64.' }
+          Assert-PeMachine $path $vc.installerArchitecture
           $signature = Get-AuthenticodeSignature $path
           if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'CN=Microsoft Corporation') {
             throw "ARM64 VC++ runtime signature is invalid: $($signature.Status)"
