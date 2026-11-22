@@ -285,7 +285,9 @@ DWORD configureUser(const std::filesystem::path &root) {
         }
     }
     logMessage("configureUser Core restart begin");
-    ipc::ServiceController controller(root / L"bin" / L"Fcitx5.exe");
+    ipc::ServiceController controller(
+        root / L"bin" / L"Fcitx5.exe", ipc::serviceIdentity(),
+        [](std::string_view message) { logMessage(message); });
     controller.restart();
     logMessage("configureUser Core restart complete; waiting for GetSettings");
     for (unsigned attempt = 0; attempt < 100; ++attempt) {
@@ -331,7 +333,9 @@ DWORD removeUser(const std::filesystem::path &root, bool rollback) {
         !api.install(profileId(fcitxProfile()).c_str(), 1)) {
         return ERROR_INSTALL_FAILURE;
     }
-    ipc::ServiceController controller(root / L"bin" / L"Fcitx5.exe");
+    ipc::ServiceController controller(
+        root / L"bin" / L"Fcitx5.exe", ipc::serviceIdentity(),
+        [](std::string_view message) { logMessage(message); });
     controller.stop();
     if (rollback && saved) {
         std::filesystem::remove(backupPath());
