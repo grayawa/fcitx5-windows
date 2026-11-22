@@ -320,10 +320,7 @@ class ServiceController {
         }
         state.lastLaunch = now;
         save(state);
-        log("ensureCore CreateProcess begin path=" +
-            core_.u8string().empty()
-                ? std::string()
-                : std::string(core_.u8string().begin(), core_.u8string().end()));
+        log("ensureCore CreateProcess begin");
         launchServiceExecutable(core_, true);
         log("ensureCore CreateProcess returned; waiting for Core owner");
         for (unsigned attempt = 0; attempt < 100; ++attempt) {
