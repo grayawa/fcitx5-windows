@@ -149,6 +149,10 @@ try {
             (Join-Path $InstallRoot 'tsf/x86/fcitx5-x86.dll'))
     }
     foreach ($path in $expectedPayload) { Assert-Path $path }
+    $runtimeManifest = Get-Content -Raw -LiteralPath (Join-Path $InstallRoot 'setup/runtime-manifest.json') | ConvertFrom-Json
+    if ($runtimeManifest.architecture -ne $Architecture) {
+        throw "Installer runtime manifest architecture mismatch: expected $Architecture, got $($runtimeManifest.architecture)."
+    }
     if ($Architecture -eq 'arm64' -and
         ((Test-Path -LiteralPath (Join-Path $InstallRoot 'tsf/fcitx5-x86_64.dll')) -or
          (Test-Path -LiteralPath (Join-Path $InstallRoot 'tsf/x86/fcitx5-x86.dll')))) {
