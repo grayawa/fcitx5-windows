@@ -544,7 +544,6 @@ jobs:
             build/dictionaries-test/*.log
             build/inputmethods-test/**/*.log
             build/engine-localization-test/**/*.log
-            build/cross-arch-*/*.err
 
   package-installer-x64:
     needs: build-x64
