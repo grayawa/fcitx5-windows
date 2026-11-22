@@ -284,8 +284,9 @@ begin
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
-#if Int(BundleRuntimes)
 var
+  RollbackCode, UnregisterCode, PendingCode: Integer;
+#if Int(BundleRuntimes)
   Code: Integer;
 #endif
 begin
@@ -327,10 +328,27 @@ begin
       else
         WizardForm.FinishedLabel.Caption := 'Fcitx5 is installed and enabled for your account.';
     except
-      if Configured then RunHelper('rollback-user', True);
-      if Registered then RunHelper('unregister-machine', False);
-      RunHelper('mark-pending', False);
+      RollbackCode := 0;
+      UnregisterCode := 0;
+      PendingCode := 0;
+      if Configured then begin
+        RollbackCode := RunHelper('rollback-user', True);
+        if RollbackCode <> 0 then
+          Log(Format('User rollback failed (%d); preserving machine TSF registration for recovery.', [RollbackCode]));
+      end;
+      { Do not leave an enabled user TIP pointing at an unregistered COM server
+        when rollback itself failed. Keep the machine registration and mark
+        the installation pending so the next run enters managed recovery. }
+      if Registered and (RollbackCode = 0) then begin
+        UnregisterCode := RunHelper('unregister-machine', False);
+        if UnregisterCode <> 0 then
+          Log(Format('Machine TSF rollback failed (%d); preserving pending installation state.', [UnregisterCode]));
+      end;
+      PendingCode := RunHelper('mark-pending', False);
+      if PendingCode <> 0 then
+        Log(Format('Could not mark failed installation pending (%d).', [PendingCode]));
       Maintenance := False;
+      Paused := False;
       RaiseException(GetExceptionMessage);
     end;
   end;
