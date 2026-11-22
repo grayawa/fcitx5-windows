@@ -4,6 +4,24 @@
 #ifndef BundleRuntimes
   #define BundleRuntimes 1
 #endif
+#ifndef IsArm64
+  #define IsArm64 0
+#endif
+#if Int(IsArm64)
+  #define SetupArchitecture "x86"
+  #define AllowedArchitectures "arm64"
+  #define InstallIn64BitMode "arm64"
+  #define UninstallIcon "tsf\fcitx5-arm64.dll"
+  #define VCRedistFile "vc_redist.arm64.exe"
+  #define WindowsAppRuntimeFile "WindowsAppRuntimeInstall-arm64.exe"
+#else
+  #define SetupArchitecture "x64"
+  #define AllowedArchitectures "x64os"
+  #define InstallIn64BitMode "x64os"
+  #define UninstallIcon "tsf\fcitx5-x86_64.dll"
+  #define VCRedistFile "vc_redist.x64.exe"
+  #define WindowsAppRuntimeFile "WindowsAppRuntimeInstall-x64.exe"
+#endif
 #if Int(BundleRuntimes)
   #ifndef Dependencies
     #error Dependencies is required
@@ -16,7 +34,11 @@
   #define PackageVersion "0.1.0.0"
 #endif
 #ifndef PackageName
-  #define PackageName "Fcitx5-0.1.0-x64-setup"
+  #if Int(IsArm64)
+    #define PackageName "Fcitx5-0.1.0-arm64-setup"
+  #else
+    #define PackageName "Fcitx5-0.1.0-x64-setup"
+  #endif
 #endif
 #ifndef RebootUpgrade
   #define RebootUpgrade 1
@@ -36,9 +58,9 @@ AppPublisher=Fcitx5 Windows contributors
 AppPublisherURL=https://github.com/fcitx/fcitx5
 DefaultDirName={autopf}\Fcitx5
 DefaultGroupName=Fcitx5
-SetupArchitecture=x64
-ArchitecturesAllowed=x64os
-ArchitecturesInstallIn64BitMode=x64os
+SetupArchitecture={#SetupArchitecture}
+ArchitecturesAllowed={#AllowedArchitectures}
+ArchitecturesInstallIn64BitMode={#InstallIn64BitMode}
 MinVersion=10.0.17763
 PrivilegesRequired=admin
 CloseApplications=no
@@ -51,7 +73,7 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 LicenseFile={#Prefix}\licenses\Fcitx5-Windows-LICENSE.txt
-UninstallDisplayIcon={app}\tsf\fcitx5-x86_64.dll
+UninstallDisplayIcon={app}\{#UninstallIcon}
 SetupLogging=yes
 VersionInfoVersion={#PackageVersion}
 Uninstallable=NormalInstall
@@ -71,9 +93,9 @@ Source: "{#Prefix}\setup\Fcitx5Upgrade.exe"; DestDir: "{app}\setup\maintenance-h
 Source: "{#RuntimeManifest}"; DestDir: "{app}\setup"; DestName: "runtime-manifest.json"; Flags: ignoreversion uninsrestartdelete; Check: NormalInstall
 #include RuntimeFiles
 #if Int(BundleRuntimes)
-Source: "{#Dependencies}\vc_redist.x64.exe"; Flags: dontcopy
-Source: "{#Dependencies}\vc_redist.x64.exe"; DestDir: "{code:DependenciesDestination}"; Flags: ignoreversion; Check: CopyUpgradeDependencies
-Source: "{#Dependencies}\WindowsAppRuntimeInstall-x64.exe"; DestDir: "{code:DependenciesDestination}"; Flags: ignoreversion uninsrestartdelete; Check: CopyRuntimeFiles
+Source: "{#Dependencies}\{#VCRedistFile}"; Flags: dontcopy
+Source: "{#Dependencies}\{#VCRedistFile}"; DestDir: "{code:DependenciesDestination}"; Flags: ignoreversion; Check: CopyUpgradeDependencies
+Source: "{#Dependencies}\{#WindowsAppRuntimeFile}"; DestDir: "{code:DependenciesDestination}"; Flags: ignoreversion uninsrestartdelete; Check: CopyRuntimeFiles
 #endif
 
 [Icons]
@@ -248,8 +270,8 @@ begin
     end;
   end;
 #if Int(BundleRuntimes)
-  ExtractTemporaryFile('vc_redist.x64.exe');
-  if not Exec(ExpandConstant('{tmp}\vc_redist.x64.exe'), '/install /quiet /norestart',
+  ExtractTemporaryFile('{#VCRedistFile}');
+  if not Exec(ExpandConstant('{tmp}\{#VCRedistFile}'), '/install /quiet /norestart',
       '', SW_HIDE, ewWaitUntilTerminated, Code) then Code := -1;
   if (Code <> 0) and (Code <> 3010) and (Code <> 1638) then begin
     ResumeInstallation;
@@ -275,7 +297,7 @@ begin
       RequireHelper('clear-maintenance', False);
       Maintenance := True;
 #if Int(BundleRuntimes)
-      if not Exec(ExpandConstant('{app}\setup\WindowsAppRuntimeInstall-x64.exe'), '--quiet',
+      if not Exec(ExpandConstant('{app}\setup\{#WindowsAppRuntimeFile}'), '--quiet',
           '', SW_HIDE, ewWaitUntilTerminated, Code) then Code := -1;
       { A newer shared runtime is acceptable only when the user bootstrap probe succeeds. }
       if (Code <> 0) and (Code <> Integer($80073D06)) then
